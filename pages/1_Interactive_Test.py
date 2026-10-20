@@ -39,9 +39,12 @@ with st.sidebar:
     use_ner = st.checkbox("Enable NER Detector", value=True, help="Contextual tagger for Names and Addresses")
     use_llm = st.checkbox("Enable LLM (Gemini) Detector", value=False, help="Zero-shot reasoning via Google Gemini API")
     
-    gemini_key_input = st.text_input("Gemini API Key", value=os.getenv("GEMINI_API_KEY", ""), type="password")
+    gemini_key_input = st.text_input("Gemini API Key (optional, session-only)", value=st.session_state.get("session_gemini_key", ""), type="password")
     if gemini_key_input:
-        os.environ["GEMINI_API_KEY"] = gemini_key_input
+        st.session_state["session_gemini_key"] = gemini_key_input.strip()
+
+    active_key = st.session_state.get("session_gemini_key") or os.getenv("GEMINI_API_KEY", "")
+    session_gemini_client = GeminiClient(api_key=active_key or None)
 
 st.subheader("Input Case Specification")
 with st.form("interactive_test_form"):
@@ -60,11 +63,13 @@ with st.form("interactive_test_form"):
     submitted = st.form_submit_button("🛡️ Run Privacy Protection")
 
 if submitted:
-    # Initialize detector based on sidebar selection
+    # Initialize detector based on sidebar selection and session client
+    llm_det = LLMDetector(client=session_gemini_client)
     detector = HybridDetector(
         enable_regex=use_regex,
         enable_ner=use_ner,
-        enable_llm=use_llm
+        enable_llm=use_llm,
+        llm_detector=llm_det
     )
     
     case = PrivacyCase(
@@ -83,9 +88,13 @@ if submitted:
     for m_name in methods_to_run:
         method_cls = MethodRegistry.get_method(m_name)
         method_instance = method_cls()
-        # Inject configured detector
+        # Inject configured detector, client, and use_llm flag
         if hasattr(method_instance, 'detector'):
             method_instance.detector = detector
+        if hasattr(method_instance, 'client'):
+            method_instance.client = session_gemini_client
+        if hasattr(method_instance, 'use_llm'):
+            method_instance.use_llm = use_llm
 
         res = method_instance.run(case)
 

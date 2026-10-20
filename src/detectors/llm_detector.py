@@ -50,18 +50,27 @@ Important: Ensure text[start:end] exactly equals the "text" field."""
             return []
 
         entities: List[PIIEntity] = []
+        next_search_from: dict[str, int] = {}
+        
         for item in result_json:
             if not isinstance(item, dict):
                 continue
             
-            ent_text = item.get("text", "")
-            pii_type = item.get("pii_type", "")
+            ent_text = item.get("text")
+            pii_type = item.get("pii_type")
             start = item.get("start")
             end = item.get("end")
-            confidence = float(item.get("confidence", 0.9))
 
-            if not ent_text or not pii_type:
+            if not isinstance(ent_text, str) or not ent_text.strip() or not isinstance(pii_type, str) or not pii_type.strip():
                 continue
+
+            ent_text = ent_text.strip()
+            pii_type = pii_type.strip()
+
+            try:
+                confidence = max(0.0, min(1.0, float(item.get("confidence", 0.9))))
+            except (TypeError, ValueError):
+                confidence = 0.9
 
             # Check/recompute offsets if LLM offsets drifted slightly
             if isinstance(start, int) and isinstance(end, int) and 0 <= start < end <= len(text):
@@ -75,11 +84,18 @@ Important: Ensure text[start:end] exactly equals the "text" field."""
                         label=pii_type,
                         confidence=confidence
                     ))
+                    next_search_from[ent_text] = max(next_search_from.get(ent_text, 0), end)
                     continue
 
-            # Fallback exact search if indices drifted
-            found_idx = text.find(ent_text)
+            # Fallback exact search advancing past previous matches
+            start_search = next_search_from.get(ent_text, 0)
+            found_idx = text.find(ent_text, start_search)
+            if found_idx == -1 and start_search > 0:
+                # Wrap search from beginning if not found after previous match
+                found_idx = text.find(ent_text)
+
             if found_idx != -1:
+                next_search_from[ent_text] = found_idx + len(ent_text)
                 entities.append(PIIEntity(
                     entity_id=str(uuid.uuid4()),
                     text=ent_text,

@@ -142,12 +142,15 @@ def run_experiment(sample_size: int = 50, output_dir: str = None):
         # Calculate authentic evaluation metrics using evaluator.py
         eval_metrics = evaluate_method(cases, method_results)
         
+        raw_ca = eval_metrics.get("Context Awareness")
+        context_aware_val = round(float(raw_ca), 3) if raw_ca is not None else None
+
         metric_record = {
             "Method": method_name,
             "F1 Score": round(float(eval_metrics.get("F1 Score", 0.0)), 3),
             "Leakage Rate": round(float(eval_metrics.get("Leakage Rate", 0.0)), 3),
             "Utility Score": round(float(eval_metrics.get("Utility Score", 0.0)), 3),
-            "Context Awareness": round(float(eval_metrics.get("Context Awareness", 0.0)), 3),
+            "Context Awareness": context_aware_val,
             "Latency (ms)": round(float(eval_metrics.get("Latency (ms)", 0.0)), 2)
         }
         all_metrics.append(metric_record)
@@ -184,7 +187,8 @@ def run_experiment(sample_size: int = 50, output_dir: str = None):
     print(f"{'Method':<15} | {'F1 Score':<10} | {'Leakage':<10} | {'Utility':<10} | {'Awareness':<10} | {'Latency (ms)':<12}")
     print("-" * 75)
     for m in all_metrics:
-        print(f"{m['Method']:<15} | {m['F1 Score']:<10.3f} | {m['Leakage Rate']:<10.3f} | {m['Utility Score']:<10.3f} | {m['Context Awareness']:<10.3f} | {m['Latency (ms)']:<12.2f}")
+        ca_display = f"{m['Context Awareness']:<10.3f}" if m['Context Awareness'] is not None else f"{'N/A':<10}"
+        print(f"{m['Method']:<15} | {m['F1 Score']:<10.3f} | {m['Leakage Rate']:<10.3f} | {m['Utility Score']:<10.3f} | {ca_display} | {m['Latency (ms)']:<12.2f}")
     print("="*75 + "\n")
 
 if __name__ == "__main__":

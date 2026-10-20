@@ -16,7 +16,7 @@ class GeminiClient:
     Does not require heavy SDKs and works reliably across platforms.
     """
     
-    DEFAULT_MODEL = "gemini-2.0-flash"
+    DEFAULT_MODEL = "gemini-1.5-flash"
     BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
@@ -42,8 +42,11 @@ class GeminiClient:
             logger.debug("Gemini API key is not configured.")
             return None
             
-        endpoint = f"{self.BASE_URL}/{self.model}:generateContent?key={self.api_key}"
-        headers = {"Content-Type": "application/json"}
+        endpoint = f"{self.BASE_URL}/{self.model}:generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key
+        }
         
         payload: Dict[str, Any] = {
             "contents": [

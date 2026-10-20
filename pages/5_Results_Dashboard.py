@@ -21,11 +21,12 @@ st.markdown("Visualizations for Phase 4 evaluation metrics comparing all five pr
 
 import json
 
+METRICS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "results", "metrics.json")
+
 @st.cache_data
-def load_metrics():
-    metrics_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "results", "metrics.json")
-    if os.path.exists(metrics_path):
-        with open(metrics_path, "r") as f:
+def load_metrics(_mtime: float):
+    if os.path.exists(METRICS_PATH):
+        with open(METRICS_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
         df_loaded = pd.DataFrame(data)
         # Normalize method names for display
@@ -36,23 +37,18 @@ def load_metrics():
             "privacylens": "PrivacyLens",
             "confaide": "ConfAIde"
         }
-        df_loaded["Method"] = df_loaded["Method"].apply(lambda m: name_map.get(m.lower(), m.upper()))
+        df_loaded["Method"] = df_loaded["Method"].apply(lambda m: name_map.get(str(m).lower(), str(m).upper()))
         return df_loaded
     else:
-        st.warning(f"Metrics file not found. Run `python run_experiment.py` first.")
-        return pd.DataFrame([
-            {"Method": "PIIvot", "F1 Score": 0.85, "Leakage Rate": 0.05, "Utility Score": 0.70, "Context Awareness": 0.30, "Latency (ms)": 45},
-            {"Method": "PRvL", "F1 Score": 0.92, "Leakage Rate": 0.02, "Utility Score": 0.65, "Context Awareness": 0.40, "Latency (ms)": 850},
-            {"Method": "PII-Bench", "F1 Score": 0.88, "Leakage Rate": 0.15, "Utility Score": 0.88, "Context Awareness": 0.60, "Latency (ms)": 120},
-            {"Method": "PrivacyLens", "F1 Score": 0.75, "Leakage Rate": 0.10, "Utility Score": 0.85, "Context Awareness": 0.92, "Latency (ms)": 400},
-            {"Method": "ConfAIde", "F1 Score": 0.80, "Leakage Rate": 0.08, "Utility Score": 0.82, "Context Awareness": 0.95, "Latency (ms)": 600},
-        ])
+        st.warning("Metrics file not found. Run `python run_experiment.py` first.")
+        st.stop()
 
-df = load_metrics()
+mtime = os.path.getmtime(METRICS_PATH) if os.path.exists(METRICS_PATH) else 0.0
+df = load_metrics(mtime)
 
 # 1. Summary Table
 st.subheader("Quantitative Evaluation (Table)")
-st.dataframe(df.style.highlight_max(subset=['F1 Score', 'Utility Score', 'Context Awareness'], color='lightgreen')
+st.dataframe(df.style.highlight_max(subset=['F1 Score', 'Utility Score'], color='lightgreen')
                      .highlight_min(subset=['Leakage Rate', 'Latency (ms)'], color='lightgreen'))
 
 col1, col2 = st.columns(2)
@@ -80,14 +76,16 @@ st.plotly_chart(fig_scatter, use_container_width=True)
 
 # 4. Radar / Comparison Visualization
 st.subheader("Multi-Dimensional Radar Chart")
-radar_df = df
+radar_df = df.copy()
+# Fill NaN for radar calculation
+radar_df['Context Awareness Plot'] = radar_df['Context Awareness'].fillna(0.0)
 
 categories = ['F1 Score', 'Utility Score', 'Context Awareness']
 fig_radar = go.Figure()
 
 for i, row in radar_df.iterrows():
     fig_radar.add_trace(go.Scatterpolar(
-        r=[row['F1 Score'], row['Utility Score'], row['Context Awareness']],
+        r=[row['F1 Score'], row['Utility Score'], row['Context Awareness Plot']],
         theta=categories,
         fill='toself',
         name=row['Method']
@@ -100,11 +98,27 @@ fig_radar.update_layout(
 )
 st.plotly_chart(fig_radar, use_container_width=True)
 
-# 5. Error Analysis
-st.subheader("Error Analysis & Interpretation")
-st.markdown("""
-**Observations from Evaluation:**
-- **PIIvot & PRvL** achieve high F1 scores and low leakage, but struggle with Utility because they rigidly mask everything without context.
-- **PII-Bench** significantly improves Utility (0.88) by retaining non-relevant PII based on the query, though Leakage slightly increases.
-- **PrivacyLens & ConfAIde** excel in Context Awareness (>0.90) by accurately determining ALLOW/DENY based on recipient and purpose, but have slightly higher Latency due to reasoning overhead.
+# 5. Error Analysis & Dynamic Observations
+st.subheader("Dynamic Benchmark Insights")
+try:
+    top_util_idx = df['Utility Score'].idxmax()
+    top_util_method = df.loc[top_util_idx, 'Method']
+    top_util_score = df.loc[top_util_idx, 'Utility Score']
+
+    ca_df = df.dropna(subset=['Context Awareness'])
+    if not ca_df.empty:
+        top_ca_idx = ca_df['Context Awareness'].idxmax()
+        top_ca_method = ca_df.loc[top_ca_idx, 'Method']
+        top_ca_score = ca_df.loc[top_ca_idx, 'Context Awareness']
+        ca_note = f"- **{top_ca_method}** achieved the highest Context Awareness ({top_ca_score:.3f}), reflecting accurate ALLOW/DENY decisions matching social privacy norms."
+    else:
+        ca_note = "- Context Awareness is computed for decision-making methods (PrivacyLens and ConfAIde)."
+
+    st.markdown(f"""
+**Key Findings from Current Benchmark:**
+- **{top_util_method}** achieved the highest utility score ({top_util_score:.3f}), maximizing textual fidelity and readability.
+{ca_note}
+- **Deterministic Latency**: Across all methods, execution time averaged {df['Latency (ms)'].mean():.2f} ms per case.
 """)
+except Exception as e:
+    st.info("Benchmark observations will appear after running `python run_experiment.py`.")

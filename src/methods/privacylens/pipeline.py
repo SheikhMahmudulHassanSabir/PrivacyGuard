@@ -26,9 +26,10 @@ class PrivacyLensMethod(PrivacyMethod):
     UNTRUSTED_RECIPIENTS = {"stranger", "unknown", "public", "advertiser", "marketing", "third_party", "vendor"}
     SUSPICIOUS_PURPOSES = {"advertising", "marketing", "curiosity", "commercial", "monetization", "tracking", "unknown"}
 
-    def __init__(self, detector: Optional[HybridDetector] = None, gemini_client: Optional[GeminiClient] = None):
+    def __init__(self, detector: Optional[HybridDetector] = None, gemini_client: Optional[GeminiClient] = None, use_llm: bool = False):
         self.detector = detector or HybridDetector()
         self.client = gemini_client or GeminiClient()
+        self.use_llm = use_llm
 
     def _evaluate_ci_norms(self, recipient: str, purpose: str, info_types: set[str], text: str) -> tuple[str, str]:
         """Evaluates CI parameters against the normative rule matrix."""
@@ -79,8 +80,8 @@ class PrivacyLensMethod(PrivacyMethod):
             case.context
         )
 
-        # 3. Optional LLM contextual refinement if Gemini is configured
-        if self.client.is_available():
+        # 3. Optional LLM contextual refinement only if caller explicitly enables LLM
+        if self.use_llm and self.client.is_available():
             prompt = (
                 f"Contextual Integrity Evaluation:\n"
                 f"Text: \"{case.context}\"\n"
@@ -93,8 +94,10 @@ class PrivacyLensMethod(PrivacyMethod):
             )
             llm_res = self.client.generate_json(prompt)
             if llm_res and isinstance(llm_res, dict):
-                decision = llm_res.get("decision", decision).upper()
-                reasoning = llm_res.get("ci_reasoning", reasoning)
+                llm_decision = str(llm_res.get("decision") or "").strip().upper()
+                if llm_decision in {"ALLOW", "DENY"} and not (decision == "DENY" and llm_decision == "ALLOW"):
+                    decision = llm_decision
+                    reasoning = str(llm_res.get("ci_reasoning") or reasoning)
 
         # 4. Generate protected text: if DENY, redact offending entities
         protected_text = case.context

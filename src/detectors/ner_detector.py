@@ -86,9 +86,10 @@ class NERDetector(BaseDetector):
             confidence = 0.65 # Base candidate confidence
 
             # Boost if preceded by title, role or introductory phrase
-            if any(h in prefix for h in self.HONORIFICS):
+            prefix_tokens = {t.strip(".,;:()") for t in tokens_before[-3:]}
+            if prefix_tokens & self.HONORIFICS:
                 confidence += 0.25
-            elif any(phrase in prefix for phrase in ["my name is", "i am", "name is", "regarding", "contact", "about"]):
+            elif re.search(r'\b(?:my name is|i am|name is|regarding|contact|about)\s*$', prefix):
                 confidence += 0.25
             elif start == 0:
                 # Starting document with a name

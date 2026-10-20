@@ -30,9 +30,10 @@ class ConfAIDEMethod(PrivacyMethod):
     TRUSTED_RECIPIENTS = {"doctor", "nurse", "physician", "teacher", "professor", "attorney", "lawyer"}
     HIGH_RISK_RECIPIENTS = {"stranger", "unknown", "public", "advertiser", "marketing", "vendor"}
 
-    def __init__(self, detector: Optional[HybridDetector] = None, gemini_client: Optional[GeminiClient] = None):
+    def __init__(self, detector: Optional[HybridDetector] = None, gemini_client: Optional[GeminiClient] = None, use_llm: bool = False):
         self.detector = detector or HybridDetector()
         self.client = gemini_client or GeminiClient()
+        self.use_llm = use_llm
 
     def _infer_domain(self, text: str) -> str:
         """Infers the operational domain from keywords in the text."""
@@ -138,8 +139,8 @@ class ConfAIDEMethod(PrivacyMethod):
         # 3. Privacy Decision: ALLOW if low/acceptable risk, DENY if high risk
         decision = "DENY" if (risk_score >= 0.50 or risk_tier in ["HIGH", "CRITICAL"]) else "ALLOW"
 
-        # 4. Optional Gemini LLM contextual perception audit
-        if self.client.is_available():
+        # 4. Optional Gemini LLM contextual perception audit (only if use_llm enabled)
+        if self.use_llm and self.client.is_available():
             prompt = (
                 f"ConfAIde Privacy Risk Perception Audit:\n"
                 f"Text: \"{case.context}\"\n"
@@ -151,9 +152,13 @@ class ConfAIDEMethod(PrivacyMethod):
             )
             llm_res = self.client.generate_json(prompt)
             if llm_res and isinstance(llm_res, dict):
-                decision = llm_res.get("decision", decision).upper()
-                risk_tier = llm_res.get("risk_tier", risk_tier).upper()
-                factors["llm_audit"] = llm_res.get("reasoning", "")
+                llm_decision = str(llm_res.get("decision") or "").strip().upper()
+                llm_tier = str(llm_res.get("risk_tier") or "").strip().upper()
+                if llm_decision in {"ALLOW", "DENY"} and not (decision == "DENY" and llm_decision == "ALLOW"):
+                    decision = llm_decision
+                if llm_tier in {"NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"}:
+                    risk_tier = llm_tier
+                factors["llm_audit"] = str(llm_res.get("reasoning") or "")
 
         # 5. Redact high-risk entities if DENY
         protected_text = case.context

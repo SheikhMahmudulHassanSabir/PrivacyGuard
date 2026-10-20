@@ -133,7 +133,8 @@ def validate_dataset(dataset_dir=None):
             errors.append(f"JSON record {idx} is not a valid JSON object")
             continue
 
-        cid = item.get("case_id", "").strip()
+        raw_cid = item.get("case_id")
+        cid = raw_cid.strip() if isinstance(raw_cid, str) else ""
         if not cid:
             errors.append(f"JSON record {idx}: Missing or empty case_id")
         json_ids.append(cid)
@@ -174,10 +175,10 @@ def validate_dataset(dataset_dir=None):
     consistency_errors = 0
 
     for csv_row in csv_records:
-        cid = csv_row["case_id"]
-        csv_contains_pii = csv_row["contains_pii"].strip().lower() in ("true", "1")
-        csv_status = csv_row["annotation_status"]
-        csv_text = csv_row["text"]
+        cid = csv_row.get("case_id", "")
+        csv_contains_pii = str(csv_row.get("contains_pii", "")).strip().lower() in ("true", "1")
+        csv_status = csv_row.get("annotation_status", "")
+        csv_text = csv_row.get("text", "")
 
         json_item = json_by_id.get(cid)
         if not json_item:
@@ -188,6 +189,9 @@ def validate_dataset(dataset_dir=None):
             errors.append(f"Text mismatch for case_id {cid} between CSV and JSON")
 
         entities = json_item.get("entities", [])
+        if not isinstance(entities, list):
+            errors.append(f"Case {cid}: 'entities' is not a list")
+            continue
         num_entities = len(entities)
 
         # Check contains_pii consistency
@@ -207,6 +211,10 @@ def validate_dataset(dataset_dir=None):
         prev_end = -1
         for ent_idx, ent in enumerate(entities):
             total_entities += 1
+            if not isinstance(ent, dict):
+                errors.append(f"Case {cid} Entity {ent_idx}: Entity is not a valid object")
+                offset_errors += 1
+                continue
             e_text = ent.get("text")
             e_label = ent.get("label")
             start = ent.get("start")

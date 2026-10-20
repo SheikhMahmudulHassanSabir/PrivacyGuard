@@ -7,6 +7,9 @@ def calculate_pii_metrics(true_entities, pred_entities):
     true_texts = {e.text.lower().strip(" \t\n\r.,;:!?)\"'") for e in true_entities if e.text.strip(" \t\n\r.,;:!?)\"'")}
     pred_texts = {e.text.lower().strip(" \t\n\r.,;:!?)\"'") for e in pred_entities if e.text.strip(" \t\n\r.,;:!?)\"'")}
     
+    if not true_texts and not pred_texts:
+        return 1.0, 1.0, 1.0
+
     tp = len(true_texts.intersection(pred_texts))
     fp = len(pred_texts - true_texts)
     fn = len(true_texts - pred_texts)
@@ -87,10 +90,10 @@ def evaluate_method(cases: List[Any], results: List[Any]) -> Dict[str, float]:
         "Recall": np.mean(metrics["recall"]) if metrics["recall"] else 0.0,
         "F1 Score": np.mean(metrics["f1"]) if metrics["f1"] else 0.0,
         "Leakage Rate": np.mean(metrics["leakage"]) if metrics["leakage"] else 0.0,
-        "Utility Score": np.mean(metrics["utility"]) if metrics["utility"] else 0.0,
-        "Context Awareness": np.mean(metrics["context_awareness"]) if metrics["context_awareness"] else 0.0,
-        "Latency (ms)": np.mean(metrics["latency"]) if metrics["latency"] else 0.0,
-        "Cost ($)": np.sum(metrics["cost"]) if metrics["cost"] else 0.0,
+        "Utility Score": float(np.mean(metrics["utility"])) if metrics["utility"] else 0.0,
+        "Context Awareness": float(np.mean(metrics["context_awareness"])) if metrics["context_awareness"] else None,
+        "Latency (ms)": float(np.mean(metrics["latency"])) if metrics["latency"] else 0.0,
+        "Cost ($)": float(np.sum(metrics["cost"])) if metrics["cost"] else 0.0,
     }
     
     return aggregated

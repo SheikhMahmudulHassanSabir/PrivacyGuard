@@ -69,6 +69,8 @@ if run_btn:
         method_instance = method_cls()
         if hasattr(method_instance, 'detector'):
             method_instance.detector = detector
+        if hasattr(method_instance, 'use_llm'):
+            method_instance.use_llm = False
 
         res = method_instance.run(case)
 
