@@ -73,9 +73,9 @@ Important: Ensure text[start:end] exactly equals the "text" field."""
             except (TypeError, ValueError):
                 confidence = 0.9
 
-            # Check/recompute offsets if LLM offsets drifted slightly
-            if isinstance(start, int) and isinstance(end, int) and 0 <= start < end <= len(text):
-                if text[start:end] == ent_text and (start, end) not in emitted_spans:
+            # Check if LLM provided valid character offsets matching the exact text
+            if isinstance(start, int) and isinstance(end, int) and 0 <= start < end <= len(text) and text[start:end] == ent_text:
+                if (start, end) not in emitted_spans:
                     emitted_spans.add((start, end))
                     entities.append(PIIEntity(
                         entity_id=str(uuid.uuid4()),
@@ -87,9 +87,10 @@ Important: Ensure text[start:end] exactly equals the "text" field."""
                         confidence=confidence
                     ))
                     next_search_from[ent_text] = max(next_search_from.get(ent_text, 0), end)
-                    continue
+                # Skip duplicate valid spans without entering the fallback search
+                continue
 
-            # Fallback exact search advancing past previous matches
+            # Fallback exact search ONLY when offsets are invalid or do not match
             start_search = next_search_from.get(ent_text, 0)
             found_idx = text.find(ent_text, start_search)
             if found_idx == -1 and start_search > 0:
