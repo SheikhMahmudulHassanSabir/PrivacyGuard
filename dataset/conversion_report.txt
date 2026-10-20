@@ -1,0 +1,96 @@
+================================================================================
+PRIVACYGUARD UNIFIED DATASET CONVERSION REPORT
+================================================================================
+Generated for: PrivacyGuard PII Evaluation Framework
+Dataset Files:
+  - Source: raw_cases.csv
+  - Unified Evaluation: evaluation_cases.csv
+  - Ground-Truth Annotations: annotated_cases.json
+  - Schema Specification: dataset_schema.json
+
+--------------------------------------------------------------------------------
+1. RECORD VOLUME & INTEGRITY
+--------------------------------------------------------------------------------
+Total Source Records:                   4,434
+Total Records in Unified Dataset:       4,434
+Total Ground-Truth Annotated Records:   4,434
+Dataset Format Constraint:              Single Unified Dataset (No Dataset A/B/C/D)
+Preservation Rate:                      100.0% (Zero records dropped or modified)
+
+Duplicate Case IDs:                     0
+Missing Case IDs:                       0
+Missing / Empty Text Records:           0
+Malformed Records:                      0
+
+--------------------------------------------------------------------------------
+2. PII DISTRIBUTION & ANNOTATION COVERAGE
+--------------------------------------------------------------------------------
+Cases with PII:                         4,425 (99.80%)
+Cases without PII (Clean Baselines):    9 (0.20%)
+Total Extracted PII Entities:           22,226
+Average Entities per PII Case:          5.02
+
+Breakdown of Ground-Truth Entity Types:
+  - NAME_STUDENT:                       11,112 (50.0%)
+  - EMAIL:                              3,794 (17.1%)
+  - STREET_ADDRESS:                     3,543 (15.9%)
+  - PHONE_NUM:                          2,439 (11.0%)
+  - USERNAME:                           718 (3.2%)
+  - URL_PERSONAL:                       620 (2.8%)
+
+Offset Accuracy Check:
+  - Exact Character Slice Matches:       22,226 / 22,226 (100.0%)
+  - Offset Mismatches:                   0
+
+--------------------------------------------------------------------------------
+3. ANNOTATION VERIFICATION STATUS & MANUAL REVIEW
+--------------------------------------------------------------------------------
+Verified Records:                       4,282 (96.57%)
+Records Requiring Manual Review:        152 (3.43%)
+
+Rationale for 'needs_review' Classification:
+  In 152 records, prompt metadata entries (e.g. malformed email addresses with
+  embedded whitespace or unpunctuated telephone fragments) are present in the
+  unstructured text body but were unannotated or partially spanned in the raw
+  source labels. To preserve scientific rigor and avoid inventing artificial
+  ground-truth annotations, these records are explicitly flagged as 'needs_review'.
+  Evaluation metrics can be computed separately on verified subsets versus full sets.
+
+--------------------------------------------------------------------------------
+4. RISK LEVEL & DOMAIN DISTRIBUTION
+--------------------------------------------------------------------------------
+Risk Levels:
+  - CRITICAL:                           2,774 (62.6%)
+  - HIGH:                               1,523 (34.3%)
+  - MEDIUM:                             119 (2.7%)
+  - LOW:                                9 (0.2%)
+  - NONE:                               9 (0.2%)
+
+Domain Categorization:
+  - general_professional     : 1,469 (33.1%)
+  - healthcare               : 806 (18.2%)
+  - services                 : 594 (13.4%)
+  - technology               : 352 (7.9%)
+  - creative_media           : 288 (6.5%)
+  - corporate_business       : 220 (5.0%)
+  - finance                  : 208 (4.7%)
+  - legal                    : 151 (3.4%)
+  - aviation_transport       : 130 (2.9%)
+  - education                : 127 (2.9%)
+  - science                  : 89 (2.0%)
+
+Format Types:
+  - professional_narrative   : 2,388 (53.9%)
+  - first_person_narrative   : 1,993 (44.9%)
+  - third_person_profile     : 53 (1.2%)
+
+--------------------------------------------------------------------------------
+5. VALIDATION ISSUES & INTEGRITY SAFEGUARDS
+--------------------------------------------------------------------------------
+  - Source File Integrity: 'raw_cases.csv' remains unmodified and preserved.
+  - Zero Records Dropped: All 4,434 records are fully incorporated.
+  - Alignment Verification: 100% of entity character offsets [start:end]
+    strictly match text[start:end].
+  - Single Unified Dataset: Complies with requirement to avoid splitting
+    into arbitrary datasets A, B, C, or D.
+================================================================================

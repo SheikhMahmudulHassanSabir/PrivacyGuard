@@ -1,0 +1,20 @@
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Environment and sensitive keys
+.env
+
+# Large raw datasets and results
+dataset/raw_cases.csv
+dataset/evaluation_cases.csv
+dataset/annotated_cases.json
+data/results/raw_results.json

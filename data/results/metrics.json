@@ -1,0 +1,42 @@
+[
+  {
+    "Method": "piivot",
+    "F1 Score": 0.465,
+    "Leakage Rate": 0.379,
+    "Utility Score": 0.966,
+    "Context Awareness": 0.0,
+    "Latency (ms)": 0.49
+  },
+  {
+    "Method": "prvl",
+    "F1 Score": 0.465,
+    "Leakage Rate": 0.379,
+    "Utility Score": 0.973,
+    "Context Awareness": 0.0,
+    "Latency (ms)": 0.49
+  },
+  {
+    "Method": "pii_bench",
+    "F1 Score": 0.465,
+    "Leakage Rate": 0.388,
+    "Utility Score": 0.973,
+    "Context Awareness": 0.0,
+    "Latency (ms)": 0.48
+  },
+  {
+    "Method": "privacylens",
+    "F1 Score": 0.465,
+    "Leakage Rate": 0.515,
+    "Utility Score": 0.978,
+    "Context Awareness": 0.792,
+    "Latency (ms)": 0.48
+  },
+  {
+    "Method": "confaide",
+    "F1 Score": 0.465,
+    "Leakage Rate": 0.476,
+    "Utility Score": 0.975,
+    "Context Awareness": 0.75,
+    "Latency (ms)": 0.53
+  }
+]

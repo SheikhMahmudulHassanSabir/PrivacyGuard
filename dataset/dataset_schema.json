@@ -1,0 +1,133 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PrivacyGuard Unified Dataset Schema",
+  "description": "Unified specification for PrivacyGuard benchmark evaluation dataset and ground-truth annotations.",
+  "version": "1.0.0",
+  "files": {
+    "evaluation_cases.csv": {
+      "format": "csv",
+      "description": "Unified evaluation dataset containing all valid source cases across domains, formats, and risk profiles.",
+      "total_records": 4434,
+      "columns": {
+        "case_id": {
+          "type": "string",
+          "description": "Unique identifier corresponding exactly to the source document UUID.",
+          "required": true,
+          "unique": true
+        },
+        "text": {
+          "type": "string",
+          "description": "Original raw text content preserved without modification.",
+          "required": true
+        },
+        "contains_pii": {
+          "type": "boolean",
+          "description": "Binary indicator specifying whether any PII entity is present in the text.",
+          "required": true
+        },
+        "pii_types": {
+          "type": "string",
+          "description": "Semicolon-separated list of distinct PII categories present, or 'NONE' if no PII is present.",
+          "required": true
+        },
+        "risk_level": {
+          "type": "string",
+          "enum": ["NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"],
+          "description": "Privacy risk category based on entity sensitivity, quantity, and re-identification potential.",
+          "required": true
+        },
+        "domain": {
+          "type": "string",
+          "enum": [
+            "healthcare",
+            "legal",
+            "technology",
+            "finance",
+            "education",
+            "services",
+            "creative_media",
+            "corporate_business",
+            "aviation_transport",
+            "science",
+            "general_professional"
+          ],
+          "description": "Professional or contextual domain of the case.",
+          "required": true
+        },
+        "language": {
+          "type": "string",
+          "description": "ISO 639-1 language code (e.g., 'en').",
+          "required": true
+        },
+        "format_type": {
+          "type": "string",
+          "enum": [
+            "first_person_narrative",
+            "third_person_profile",
+            "professional_narrative"
+          ],
+          "description": "Structural format and style of the text.",
+          "required": true
+        },
+        "annotation_status": {
+          "type": "string",
+          "enum": ["verified", "needs_review"],
+          "description": "Validation status indicating whether ground-truth spans are verified or require manual review.",
+          "required": true
+        }
+      }
+    },
+    "annotated_cases.json": {
+      "format": "json",
+      "description": "Granular ground-truth PII entity annotations with character-level offsets.",
+      "record_schema": {
+        "type": "object",
+        "required": ["case_id", "text", "entities", "annotation_status"],
+        "properties": {
+          "case_id": { "type": "string" },
+          "text": { "type": "string" },
+          "annotation_status": { "type": "string", "enum": ["verified", "needs_review"] },
+          "entities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["text", "label", "start", "end"],
+              "properties": {
+                "text": { "type": "string", "description": "Exact text span matching text[start:end]." },
+                "label": { "type": "string", "description": "PII entity category." },
+                "start": { "type": "integer", "minimum": 0, "description": "Zero-based inclusive start character index." },
+                "end": { "type": "integer", "minimum": 0, "description": "Zero-based exclusive end character index." }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "offset_conventions": {
+    "indexing": "Zero-based character indexing",
+    "interval": "[start, end) where start is inclusive and end is exclusive",
+    "invariant": "For any entity e, text[e.start:e.end] == e.text"
+  },
+  "supported_pii_labels": {
+    "NAME_STUDENT": "Full or partial names of individuals, students, or professionals.",
+    "EMAIL": "Electronic mail addresses.",
+    "PHONE_NUM": "Telephone and mobile contact numbers.",
+    "STREET_ADDRESS": "Physical residential, studio, or corporate street addresses.",
+    "USERNAME": "Online user handles, usernames, or account IDs.",
+    "URL_PERSONAL": "Personal URLs, portfolios, or web links."
+  },
+  "risk_level_rules": {
+    "NONE": "0 PII entities present in the record.",
+    "LOW": "Low-sensitivity identifiers only (USERNAME or URL_PERSONAL).",
+    "MEDIUM": "Direct personal identifier only (NAME_STUDENT) without physical address or direct contact info.",
+    "HIGH": "Contains direct contact channels (PHONE_NUM, EMAIL) or physical location (STREET_ADDRESS).",
+    "CRITICAL": "Composite identity disclosure: NAME_STUDENT combined with physical address and contact channel (PHONE_NUM or EMAIL)."
+  },
+  "annotation_rules": {
+    "strict_offsets": "All entity offsets must precisely align with the original text string.",
+    "no_fabrication": "Ground-truth annotations must originate from validated token-level source labels.",
+    "uncertainty_flagging": "Cases with untagged prompt metadata or ambiguous boundaries are flagged as 'needs_review' rather than fabricated.",
+    "unified_representation": "All cases (PII, non-PII, multilingual, multi-entity) reside in one single dataset file."
+  }
+}
