@@ -75,9 +75,7 @@ Important: Ensure text[start:end] exactly equals the "text" field."""
 
             # Check/recompute offsets if LLM offsets drifted slightly
             if isinstance(start, int) and isinstance(end, int) and 0 <= start < end <= len(text):
-                if text[start:end] == ent_text:
-                    if (start, end) in emitted_spans:
-                        continue
+                if text[start:end] == ent_text and (start, end) not in emitted_spans:
                     emitted_spans.add((start, end))
                     entities.append(PIIEntity(
                         entity_id=str(uuid.uuid4()),
