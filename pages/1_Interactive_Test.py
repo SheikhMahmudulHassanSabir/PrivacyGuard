@@ -40,8 +40,10 @@ with st.sidebar:
     use_llm = st.checkbox("Enable LLM (Gemini) Detector", value=False, help="Zero-shot reasoning via Google Gemini API")
     
     gemini_key_input = st.text_input("Gemini API Key (optional, session-only)", value=st.session_state.get("session_gemini_key", ""), type="password")
-    if gemini_key_input:
+    if gemini_key_input and gemini_key_input.strip():
         st.session_state["session_gemini_key"] = gemini_key_input.strip()
+    else:
+        st.session_state.pop("session_gemini_key", None)
 
     active_key = st.session_state.get("session_gemini_key") or os.getenv("GEMINI_API_KEY", "")
     session_gemini_client = GeminiClient(api_key=active_key or None)

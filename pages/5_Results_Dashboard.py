@@ -76,16 +76,14 @@ st.plotly_chart(fig_scatter, use_container_width=True)
 
 # 4. Radar / Comparison Visualization
 st.subheader("Multi-Dimensional Radar Chart")
-radar_df = df.copy()
-# Fill NaN for radar calculation
-radar_df['Context Awareness Plot'] = radar_df['Context Awareness'].fillna(0.0)
-
 categories = ['F1 Score', 'Utility Score', 'Context Awareness']
 fig_radar = go.Figure()
 
-for i, row in radar_df.iterrows():
+for i, row in df.iterrows():
+    ca_val = row['Context Awareness']
+    ca_score = None if pd.isna(ca_val) else float(ca_val)
     fig_radar.add_trace(go.Scatterpolar(
-        r=[row['F1 Score'], row['Utility Score'], row['Context Awareness Plot']],
+        r=[row['F1 Score'], row['Utility Score'], ca_score],
         theta=categories,
         fill='toself',
         name=row['Method']

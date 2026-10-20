@@ -51,6 +51,7 @@ Important: Ensure text[start:end] exactly equals the "text" field."""
 
         entities: List[PIIEntity] = []
         next_search_from: dict[str, int] = {}
+        emitted_spans: set[tuple[int, int]] = set()
         
         for item in result_json:
             if not isinstance(item, dict):
@@ -74,7 +75,8 @@ Important: Ensure text[start:end] exactly equals the "text" field."""
 
             # Check/recompute offsets if LLM offsets drifted slightly
             if isinstance(start, int) and isinstance(end, int) and 0 <= start < end <= len(text):
-                if text[start:end] == ent_text:
+                if text[start:end] == ent_text and (start, end) not in emitted_spans:
+                    emitted_spans.add((start, end))
                     entities.append(PIIEntity(
                         entity_id=str(uuid.uuid4()),
                         text=ent_text,
@@ -95,6 +97,10 @@ Important: Ensure text[start:end] exactly equals the "text" field."""
                 found_idx = text.find(ent_text)
 
             if found_idx != -1:
+                cand_span = (found_idx, found_idx + len(ent_text))
+                if cand_span in emitted_spans:
+                    continue
+                emitted_spans.add(cand_span)
                 next_search_from[ent_text] = found_idx + len(ent_text)
                 entities.append(PIIEntity(
                     entity_id=str(uuid.uuid4()),
