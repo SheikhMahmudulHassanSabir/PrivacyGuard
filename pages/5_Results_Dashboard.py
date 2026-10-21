@@ -24,7 +24,7 @@ import json
 METRICS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "results", "metrics.json")
 
 @st.cache_data
-def load_metrics(_mtime: float):
+def load_metrics(mtime: float):
     if os.path.exists(METRICS_PATH):
         with open(METRICS_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
