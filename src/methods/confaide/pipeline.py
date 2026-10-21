@@ -154,10 +154,12 @@ class ConfAIDEMethod(PrivacyMethod):
             if llm_res and isinstance(llm_res, dict):
                 llm_decision = str(llm_res.get("decision") or "").strip().upper()
                 llm_tier = str(llm_res.get("risk_tier") or "").strip().upper()
-                if llm_decision in {"ALLOW", "DENY"} and not (decision == "DENY" and llm_decision == "ALLOW"):
-                    decision = llm_decision
-                if llm_tier in {"NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"}:
-                    risk_tier = llm_tier
+                if llm_decision in {"ALLOW", "DENY"}:
+                    if not (decision == "DENY" and llm_decision == "ALLOW"):
+                        decision = llm_decision
+                        if llm_tier in {"NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"}:
+                            risk_tier = llm_tier
+                            factors["risk_tier"] = risk_tier
                 factors["llm_audit"] = str(llm_res.get("reasoning") or "")
 
         # 5. Redact high-risk entities if DENY

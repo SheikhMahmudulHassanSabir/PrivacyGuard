@@ -1,42 +1,42 @@
 [
   {
     "Method": "piivot",
-    "F1 Score": 0.465,
-    "Leakage Rate": 0.379,
-    "Utility Score": 0.966,
-    "Context Awareness": 0.0,
+    "F1 Score": 0.572,
+    "Leakage Rate": 0.387,
+    "Utility Score": 0.968,
+    "Context Awareness": null,
     "Latency (ms)": 0.49
   },
   {
     "Method": "prvl",
-    "F1 Score": 0.465,
-    "Leakage Rate": 0.379,
-    "Utility Score": 0.973,
-    "Context Awareness": 0.0,
-    "Latency (ms)": 0.49
+    "F1 Score": 0.572,
+    "Leakage Rate": 0.387,
+    "Utility Score": 0.974,
+    "Context Awareness": null,
+    "Latency (ms)": 0.6
   },
   {
     "Method": "pii_bench",
-    "F1 Score": 0.465,
-    "Leakage Rate": 0.388,
-    "Utility Score": 0.973,
-    "Context Awareness": 0.0,
-    "Latency (ms)": 0.48
+    "F1 Score": 0.572,
+    "Leakage Rate": 0.397,
+    "Utility Score": 0.974,
+    "Context Awareness": null,
+    "Latency (ms)": 0.5
   },
   {
     "Method": "privacylens",
-    "F1 Score": 0.465,
+    "F1 Score": 0.572,
     "Leakage Rate": 0.515,
-    "Utility Score": 0.978,
+    "Utility Score": 0.979,
     "Context Awareness": 0.792,
-    "Latency (ms)": 0.48
+    "Latency (ms)": 0.49
   },
   {
     "Method": "confaide",
-    "F1 Score": 0.465,
-    "Leakage Rate": 0.476,
-    "Utility Score": 0.975,
+    "F1 Score": 0.572,
+    "Leakage Rate": 0.485,
+    "Utility Score": 0.976,
     "Context Awareness": 0.75,
-    "Latency (ms)": 0.53
+    "Latency (ms)": 0.64
   }
 ]

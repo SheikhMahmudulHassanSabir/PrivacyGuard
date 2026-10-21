@@ -8,7 +8,7 @@ def calculate_pii_metrics(true_entities, pred_entities):
     pred_texts = {e.text.lower().strip(" \t\n\r.,;:!?)\"'") for e in pred_entities if e.text.strip(" \t\n\r.,;:!?)\"'")}
     
     if not true_texts and not pred_texts:
-        return 1.0, 1.0, 1.0
+        return 1.0, 1.0, None
 
     tp = len(true_texts.intersection(pred_texts))
     fp = len(pred_texts - true_texts)
@@ -59,12 +59,16 @@ def evaluate_method(cases: List[Any], results: List[Any]) -> Dict[str, float]:
         "cost": []
     }
     
+    true_negatives = 0
     for case, res in zip(cases, results):
         # 1. PII Detection (Precision, Recall, F1)
         p, r, f = calculate_pii_metrics(case.entities, res.detected_entities)
         metrics["precision"].append(p)
         metrics["recall"].append(r)
-        metrics["f1"].append(f)
+        if f is not None:
+            metrics["f1"].append(f)
+        else:
+            true_negatives += 1
         
         # 2. Leakage Rate
         leakage = calculate_leakage(case.entities, res.protected_text)
@@ -86,10 +90,10 @@ def evaluate_method(cases: List[Any], results: List[Any]) -> Dict[str, float]:
             
     # Aggregate
     aggregated = {
-        "Precision": np.mean(metrics["precision"]) if metrics["precision"] else 0.0,
-        "Recall": np.mean(metrics["recall"]) if metrics["recall"] else 0.0,
-        "F1 Score": np.mean(metrics["f1"]) if metrics["f1"] else 0.0,
-        "Leakage Rate": np.mean(metrics["leakage"]) if metrics["leakage"] else 0.0,
+        "Precision": float(np.mean(metrics["precision"])) if metrics["precision"] else 0.0,
+        "Recall": float(np.mean(metrics["recall"])) if metrics["recall"] else 0.0,
+        "F1 Score": float(np.mean(metrics["f1"])) if metrics["f1"] else (1.0 if true_negatives > 0 else 0.0),
+        "Leakage Rate": float(np.mean(metrics["leakage"])) if metrics["leakage"] else 0.0,
         "Utility Score": float(np.mean(metrics["utility"])) if metrics["utility"] else 0.0,
         "Context Awareness": float(np.mean(metrics["context_awareness"])) if metrics["context_awareness"] else None,
         "Latency (ms)": float(np.mean(metrics["latency"])) if metrics["latency"] else 0.0,

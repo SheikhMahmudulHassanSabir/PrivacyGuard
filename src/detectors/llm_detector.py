@@ -91,24 +91,36 @@ Important: Ensure text[start:end] exactly equals the "text" field."""
                 continue
 
             # Fallback exact search ONLY when offsets are invalid or do not match
-            start_search = next_search_from.get(ent_text, 0)
-            found_idx = text.find(ent_text, start_search)
-            if found_idx == -1 and start_search > 0:
-                # Wrap search from beginning if not found after previous match
-                found_idx = text.find(ent_text)
+            # Advance past emitted spans, wrapping once if needed, until an unused occurrence is found
+            search_pos = next_search_from.get(ent_text, 0)
+            wrapped = False
+            found_span = None
 
-            if found_idx != -1:
+            while True:
+                found_idx = text.find(ent_text, search_pos)
+                if found_idx == -1:
+                    if not wrapped and search_pos > 0:
+                        wrapped = True
+                        search_pos = 0
+                        continue
+                    break
+
                 cand_span = (found_idx, found_idx + len(ent_text))
-                if cand_span in emitted_spans:
-                    continue
-                emitted_spans.add(cand_span)
-                next_search_from[ent_text] = found_idx + len(ent_text)
+                search_pos = found_idx + len(ent_text)
+
+                if cand_span not in emitted_spans:
+                    found_span = cand_span
+                    break
+
+            if found_span is not None:
+                emitted_spans.add(found_span)
+                next_search_from[ent_text] = max(next_search_from.get(ent_text, 0), found_span[1])
                 entities.append(PIIEntity(
                     entity_id=str(uuid.uuid4()),
                     text=ent_text,
                     pii_type=pii_type,
-                    start=found_idx,
-                    end=found_idx + len(ent_text),
+                    start=found_span[0],
+                    end=found_span[1],
                     label=pii_type,
                     confidence=confidence
                 ))
