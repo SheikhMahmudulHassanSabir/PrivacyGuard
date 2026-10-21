@@ -5,7 +5,7 @@
     "Leakage Rate": 0.387,
     "Utility Score": 0.968,
     "Context Awareness": null,
-    "Latency (ms)": 0.49
+    "Latency (ms)": 0.5
   },
   {
     "Method": "prvl",
@@ -13,7 +13,7 @@
     "Leakage Rate": 0.387,
     "Utility Score": 0.974,
     "Context Awareness": null,
-    "Latency (ms)": 0.6
+    "Latency (ms)": 0.49
   },
   {
     "Method": "pii_bench",
@@ -21,7 +21,7 @@
     "Leakage Rate": 0.397,
     "Utility Score": 0.974,
     "Context Awareness": null,
-    "Latency (ms)": 0.5
+    "Latency (ms)": 0.49
   },
   {
     "Method": "privacylens",
@@ -29,7 +29,7 @@
     "Leakage Rate": 0.515,
     "Utility Score": 0.979,
     "Context Awareness": 0.792,
-    "Latency (ms)": 0.49
+    "Latency (ms)": 0.5
   },
   {
     "Method": "confaide",
@@ -37,6 +37,6 @@
     "Leakage Rate": 0.485,
     "Utility Score": 0.976,
     "Context Awareness": 0.75,
-    "Latency (ms)": 0.64
+    "Latency (ms)": 0.54
   }
 ]
