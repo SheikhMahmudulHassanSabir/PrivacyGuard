@@ -16,7 +16,7 @@ class GeminiClient:
     Does not require heavy SDKs and works reliably across platforms.
     """
     
-    DEFAULT_MODEL = "gemini-3.6-flash"
+    DEFAULT_MODEL = "gemini-3.5-flash"
     BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):

@@ -175,7 +175,7 @@ def validate_dataset(dataset_dir=None):
     consistency_errors = 0
 
     for csv_row in csv_records:
-        cid = csv_row.get("case_id", "")
+        cid = (csv_row.get("case_id") or "").strip()
         csv_contains_pii = str(csv_row.get("contains_pii", "")).strip().lower() in ("true", "1")
         csv_status = csv_row.get("annotation_status", "")
         csv_text = csv_row.get("text", "")
