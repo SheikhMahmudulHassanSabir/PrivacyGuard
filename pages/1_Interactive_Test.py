@@ -12,6 +12,7 @@ if project_root not in sys.path:
 from src.core.schemas import PrivacyCase
 from src.core.registry import MethodRegistry
 from src.detectors.hybrid_detector import HybridDetector
+from src.detectors.llm_detector import LLMDetector
 from src.core.gemini_client import GeminiClient
 
 # Register methods
@@ -21,16 +22,16 @@ import src.methods.pii_bench.pipeline
 import src.methods.privacylens.pipeline
 import src.methods.confaide.pipeline
 
-try:
-    from ui_utils import inject_custom_css
-    inject_custom_css()
-except Exception:
-    pass
+from ui_utils import inject_custom_css, render_header
 
 st.set_page_config(page_title="Interactive Test - PrivacyGuard", page_icon="🧪", layout="wide")
+inject_custom_css()
 
-st.title("🧪 Interactive Privacy Protection Test")
-st.markdown("Test single cases in real-time across **all 5 privacy protection methods** using the **Hybrid (Regex + NER + LLM)** detection pipeline.")
+render_header(
+    "🧪 Interactive Privacy Protection Test",
+    "Test individual text inputs live across all 5 privacy methods using the multi-stage Hybrid Detector.",
+    badge_text="Real-Time Testing"
+)
 
 # Sidebar settings for Gemini API Key
 with st.sidebar:

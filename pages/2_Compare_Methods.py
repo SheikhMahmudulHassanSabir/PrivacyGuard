@@ -21,16 +21,16 @@ import src.methods.pii_bench.pipeline
 import src.methods.privacylens.pipeline
 import src.methods.confaide.pipeline
 
-try:
-    from ui_utils import inject_custom_css
-    inject_custom_css()
-except Exception:
-    pass
+from ui_utils import inject_custom_css, render_header
 
 st.set_page_config(page_title="Compare Methods - PrivacyGuard", page_icon="⚖️", layout="wide")
+inject_custom_css()
 
-st.title("⚖️ Side-by-Side Method Comparison")
-st.markdown("Compare how **all 5 privacy protection methods** respond to the exact same input case.")
+render_header(
+    "⚖️ Side-by-Side Method Comparison",
+    "Compare how all 5 privacy methods respond to the exact same input case and constraints.",
+    badge_text="Multi-Method Diff"
+)
 
 # Input Form
 with st.form("compare_methods_form"):
