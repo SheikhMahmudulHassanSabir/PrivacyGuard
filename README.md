@@ -50,7 +50,7 @@ privacyguard/
 ├── pages/
 │   ├── 1_Interactive_Test.py   # Live PII detection & masking tester
 │   ├── 2_Compare_Methods.py    # Side-by-side 5-method comparison
-│   └── 5_Results_Dashboard.py  # Benchmark metrics & charts
+│   └── 3_Results_Dashboard.py  # Benchmark metrics & charts
 ├── dataset/                    # Evaluation datasets & test cases
 ├── data/                       # Empirical evaluation results & caches
 └── tests/                      # Automated pytest unit test suite
