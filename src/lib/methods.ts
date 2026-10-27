@@ -485,13 +485,14 @@ export class ConfAIDEMethod {
     const hasName = entityTypes.has('NAME_STUDENT');
     const hasDirectContact = entityTypes.has('PHONE_NUM') || entityTypes.has('EMAIL') || entityTypes.has('STREET_ADDRESS');
     const hasWeak = entityTypes.has('USERNAME') || entityTypes.has('URL_PERSONAL');
+    const hasOther = entityTypes.size > 0 && !hasName && !hasDirectContact && !hasWeak;
 
     let s_e = 0.05;
     if (hasName && hasDirectContact) {
       s_e = 0.90;
     } else if (hasDirectContact) {
       s_e = 0.70;
-    } else if (hasName) {
+    } else if (hasName || hasOther) {
       s_e = 0.45;
     } else if (hasWeak) {
       s_e = 0.20;

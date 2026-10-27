@@ -1,7 +1,9 @@
 import { PIIEntity, PIIEntityType } from '../types/privacy';
 
-function generateId(): string {
-  return 'ent_' + Math.random().toString(36).substring(2, 9);
+export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+
+function generateId(prefix: string = 'ent'): string {
+  return `${prefix}_` + Math.random().toString(36).substring(2, 9);
 }
 
 function cleanTrim(
@@ -55,7 +57,7 @@ export class RegexDetector {
       occupiedSpans.add(key);
 
       entities.push({
-        entity_id: generateId(),
+        entity_id: generateId('reg'),
         text: trimmed.text,
         pii_type,
         start: trimmed.start,
@@ -153,7 +155,7 @@ export class NERDetector {
       occupiedSpans.add(key);
 
       entities.push({
-        entity_id: generateId(),
+        entity_id: generateId('ner'),
         text: trimmed.text,
         pii_type,
         start: trimmed.start,
@@ -216,6 +218,67 @@ export class NERDetector {
   }
 }
 
+function canonicalizeLLMType(rawType: string): PIIEntityType {
+  const upper = (rawType || '').trim().toUpperCase().replace(/[-\s]+/g, '_');
+  if (
+    upper === 'NAME_STUDENT' ||
+    upper === 'NAME' ||
+    upper === 'PERSON' ||
+    upper === 'STUDENT' ||
+    upper === 'PATIENT' ||
+    upper === 'CLIENT' ||
+    upper === 'FULL_NAME'
+  ) {
+    return 'NAME_STUDENT';
+  }
+  if (upper === 'EMAIL' || upper === 'EMAIL_ADDRESS' || upper === 'MAIL') {
+    return 'EMAIL';
+  }
+  if (
+    upper === 'PHONE_NUM' ||
+    upper === 'PHONE' ||
+    upper === 'PHONE_NUMBER' ||
+    upper === 'TELEPHONE' ||
+    upper === 'MOBILE' ||
+    upper === 'CONTACT' ||
+    upper === 'CONTACT_NUM'
+  ) {
+    return 'PHONE_NUM';
+  }
+  if (
+    upper === 'STREET_ADDRESS' ||
+    upper === 'ADDRESS' ||
+    upper === 'LOCATION' ||
+    upper === 'RESIDENCE' ||
+    upper === 'PHYSICAL_ADDRESS' ||
+    upper === 'STREET'
+  ) {
+    return 'STREET_ADDRESS';
+  }
+  if (
+    upper === 'USERNAME' ||
+    upper === 'USER' ||
+    upper === 'HANDLE' ||
+    upper === 'ACCOUNT' ||
+    upper === 'NICKNAME'
+  ) {
+    return 'USERNAME';
+  }
+  if (
+    upper === 'URL_PERSONAL' ||
+    upper === 'URL' ||
+    upper === 'WEBSITE' ||
+    upper === 'LINK' ||
+    upper === 'PORTFOLIO' ||
+    upper === 'PERSONAL_URL'
+  ) {
+    return 'URL_PERSONAL';
+  }
+  // Conservatively map any other unrecognized PII entity to NAME_STUDENT
+  // so it receives proper exposure assessment and masking protection in ConfAIde
+  return 'NAME_STUDENT';
+}
+
 export class LLMDetector {
   private apiKey: string;
   private model: string;
@@ -241,7 +304,7 @@ Return ONLY a valid JSON list of objects with the exact schema:
 ]
 Important: Ensure text[start:end] exactly equals the "text" field.`;
 
-  constructor(apiKey?: string, model: string = 'gemini-2.5-flash') {
+  constructor(apiKey?: string, model: string = DEFAULT_GEMINI_MODEL) {
     let resolvedKey = (apiKey || '').trim();
     if (!resolvedKey && typeof localStorage !== 'undefined') {
       try {
@@ -266,7 +329,7 @@ Important: Ensure text[start:end] exactly equals the "text" field.`;
     if (!resolvedModel && typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_MODEL) {
       resolvedModel = String((import.meta as any).env.VITE_GEMINI_MODEL).trim();
     }
-    this.model = resolvedModel || 'gemini-2.5-flash';
+    this.model = resolvedModel || DEFAULT_GEMINI_MODEL;
   }
 
   isAvailable(): boolean {
@@ -320,7 +383,11 @@ Important: Ensure text[start:end] exactly equals the "text" field.`;
     }
 
     const data = await response.json();
-    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const candidate = data.candidates?.[0];
+    const candidateText = candidate?.content?.parts?.[0]?.text;
+    if (candidate?.finishReason === 'MAX_TOKENS') {
+      console.warn('Gemini stopped at maxOutputTokens. LLM PII detections may be incomplete.');
+    }
     if (!candidateText) {
       return [];
     }
@@ -347,13 +414,14 @@ Important: Ensure text[start:end] exactly equals the "text" field.`;
     for (const item of parsed) {
       if (!item || typeof item !== 'object') continue;
       const entText = typeof item.text === 'string' ? item.text.trim() : '';
-      const piiType = typeof item.pii_type === 'string' ? item.pii_type.trim() : '';
+      const rawPiiType = typeof item.pii_type === 'string' ? item.pii_type.trim() : '';
       const start = item.start;
       const end = item.end;
       const confidence =
         typeof item.confidence === 'number' ? Math.max(0, Math.min(1, item.confidence)) : 0.95;
 
-      if (!entText || !piiType) continue;
+      if (!entText || !rawPiiType) continue;
+      const piiType = canonicalizeLLMType(rawPiiType);
 
       // 1. Direct offset match check
       if (
@@ -368,7 +436,7 @@ Important: Ensure text[start:end] exactly equals the "text" field.`;
         if (!emittedSpans.has(spanKey)) {
           emittedSpans.add(spanKey);
           entities.push({
-            entity_id: 'llm_' + Math.random().toString(36).substring(2, 9),
+            entity_id: generateId('llm'),
             text: entText,
             pii_type: piiType,
             start,
@@ -410,7 +478,7 @@ Important: Ensure text[start:end] exactly equals the "text" field.`;
         emittedSpans.add(`${foundSpan[0]}:${foundSpan[1]}`);
         nextSearchFrom.set(entText, Math.max(nextSearchFrom.get(entText) || 0, foundSpan[1]));
         entities.push({
-          entity_id: 'llm_' + Math.random().toString(36).substring(2, 9),
+          entity_id: generateId('llm'),
           text: entText,
           pii_type: piiType,
           start: foundSpan[0],

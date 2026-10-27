@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Header, MethodBadge, DecisionBadge } from '../components/CommonComponents';
-import { HybridDetector } from '../lib/detectors';
+import { DEFAULT_GEMINI_MODEL, HybridDetector } from '../lib/detectors';
 import {
   PIIvotMethod,
   PRvLMethod,
@@ -62,10 +62,10 @@ export const InteractiveTestView: React.FC = () => {
       return (
         localStorage.getItem('pg_gemini_model') ||
         ((import.meta as any).env?.VITE_GEMINI_MODEL as string) ||
-        'gemini-2.5-flash'
+        DEFAULT_GEMINI_MODEL
       );
     } catch {
-      return 'gemini-2.5-flash';
+      return DEFAULT_GEMINI_MODEL;
     }
   });
 
