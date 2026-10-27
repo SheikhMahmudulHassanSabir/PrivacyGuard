@@ -216,25 +216,244 @@ export class NERDetector {
   }
 }
 
+export class LLMDetector {
+  private apiKey: string;
+  private model: string;
+  private static SYSTEM_PROMPT = `You are a specialized Privacy & PII Extraction Engine.
+Analyze the provided text and identify all Personally Identifiable Information (PII) spans.
+Supported PII categories:
+- NAME_STUDENT: Names of students, clients, patients, or individuals
+- EMAIL: Email addresses
+- PHONE_NUM: Telephone or mobile contact numbers
+- STREET_ADDRESS: Physical residential, corporate, or studio street addresses
+- USERNAME: Usernames, online handles, or account IDs
+- URL_PERSONAL: Personal websites, portfolio URLs, or profile links
+
+Return ONLY a valid JSON list of objects with the exact schema:
+[
+  {
+    "text": "exact substring from input text",
+    "pii_type": "one of the supported categories",
+    "start": zero-based start character index,
+    "end": zero-based end character index,
+    "confidence": float between 0.0 and 1.0
+  }
+]
+Important: Ensure text[start:end] exactly equals the "text" field.`;
+
+  constructor(apiKey?: string, model: string = 'gemini-2.5-flash') {
+    let resolvedKey = (apiKey || '').trim();
+    if (!resolvedKey && typeof localStorage !== 'undefined') {
+      try {
+        resolvedKey = (localStorage.getItem('pg_gemini_api_key') || '').trim();
+      } catch {
+        // Fallback for sandboxed or restricted storage environments
+      }
+    }
+    if (!resolvedKey && typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY) {
+      resolvedKey = String((import.meta as any).env.VITE_GEMINI_API_KEY).trim();
+    }
+    this.apiKey = resolvedKey;
+
+    let resolvedModel = (model || '').trim();
+    if (!resolvedModel && typeof localStorage !== 'undefined') {
+      try {
+        resolvedModel = (localStorage.getItem('pg_gemini_model') || '').trim();
+      } catch {
+        // Fallback
+      }
+    }
+    if (!resolvedModel && typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_MODEL) {
+      resolvedModel = String((import.meta as any).env.VITE_GEMINI_MODEL).trim();
+    }
+    this.model = resolvedModel || 'gemini-2.5-flash';
+  }
+
+  isAvailable(): boolean {
+    return Boolean(this.apiKey && this.apiKey.length > 0 && !this.apiKey.startsWith('your_'));
+  }
+
+  async detect(text: string): Promise<PIIEntity[]> {
+    if (!this.isAvailable() || !text || text.trim().length === 0) {
+      return [];
+    }
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      this.model
+    )}:generateContent?key=${encodeURIComponent(this.apiKey)}`;
+
+    const prompt = `Extract all PII from the following text:\n\n"""\n${text}\n"""`;
+
+    const payload = {
+      contents: [
+        {
+          parts: [{ text: prompt }],
+        },
+      ],
+      systemInstruction: {
+        parts: [{ text: LLMDetector.SYSTEM_PROMPT }],
+      },
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 2048,
+        responseMimeType: 'application/json',
+      },
+    };
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      let errDetail = '';
+      try {
+        const errJson = await response.json();
+        errDetail = errJson.error?.message || JSON.stringify(errJson);
+      } catch {
+        errDetail = await response.text();
+      }
+      throw new Error(`Google Gemini API error (${response.status}): ${errDetail}`);
+    }
+
+    const data = await response.json();
+    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!candidateText) {
+      return [];
+    }
+
+    let parsed: any;
+    try {
+      let cleaned = candidateText.trim();
+      if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
+      if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
+      if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
+      parsed = JSON.parse(cleaned.trim());
+    } catch {
+      return [];
+    }
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    const entities: PIIEntity[] = [];
+    const emittedSpans = new Set<string>();
+    const nextSearchFrom = new Map<string, number>();
+
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object') continue;
+      const entText = typeof item.text === 'string' ? item.text.trim() : '';
+      const piiType = typeof item.pii_type === 'string' ? item.pii_type.trim() : '';
+      const start = item.start;
+      const end = item.end;
+      const confidence =
+        typeof item.confidence === 'number' ? Math.max(0, Math.min(1, item.confidence)) : 0.95;
+
+      if (!entText || !piiType) continue;
+
+      // 1. Direct offset match check
+      if (
+        Number.isInteger(start) &&
+        Number.isInteger(end) &&
+        start >= 0 &&
+        start < end &&
+        end <= text.length &&
+        text.slice(start, end) === entText
+      ) {
+        const spanKey = `${start}:${end}`;
+        if (!emittedSpans.has(spanKey)) {
+          emittedSpans.add(spanKey);
+          entities.push({
+            entity_id: 'llm_' + Math.random().toString(36).substring(2, 9),
+            text: entText,
+            pii_type: piiType,
+            start,
+            end,
+            label: piiType,
+            confidence: Math.round(confidence * 100) / 100,
+          });
+          nextSearchFrom.set(entText, Math.max(nextSearchFrom.get(entText) || 0, end));
+        }
+        continue;
+      }
+
+      // 2. Fallback search if LLM offsets do not align
+      let searchPos = nextSearchFrom.get(entText) || 0;
+      let wrapped = false;
+      let foundSpan: [number, number] | null = null;
+
+      while (true) {
+        const foundIdx = text.indexOf(entText, searchPos);
+        if (foundIdx === -1) {
+          if (!wrapped && searchPos > 0) {
+            wrapped = true;
+            searchPos = 0;
+            continue;
+          }
+          break;
+        }
+
+        const span: [number, number] = [foundIdx, foundIdx + entText.length];
+        searchPos = foundIdx + entText.length;
+        const key = `${span[0]}:${span[1]}`;
+        if (!emittedSpans.has(key)) {
+          foundSpan = span;
+          break;
+        }
+      }
+
+      if (foundSpan) {
+        emittedSpans.add(`${foundSpan[0]}:${foundSpan[1]}`);
+        nextSearchFrom.set(entText, Math.max(nextSearchFrom.get(entText) || 0, foundSpan[1]));
+        entities.push({
+          entity_id: 'llm_' + Math.random().toString(36).substring(2, 9),
+          text: entText,
+          pii_type: piiType,
+          start: foundSpan[0],
+          end: foundSpan[1],
+          label: piiType,
+          confidence: Math.round(confidence * 100) / 100,
+        });
+      }
+    }
+
+    return entities.sort((a, b) => a.start - b.start);
+  }
+}
+
 export class HybridDetector {
   private regexDetector: RegexDetector;
   private nerDetector: NERDetector;
+  private llmDetector: LLMDetector;
   private enableRegex: boolean;
   private enableNer: boolean;
   private enableLlm: boolean;
 
   private static STRUCTURED_TYPES = new Set(['EMAIL', 'PHONE_NUM', 'URL_PERSONAL']);
 
-  constructor(options: {
-    enableRegex?: boolean;
-    enableNer?: boolean;
-    enableLlm?: boolean;
-  } = {}) {
+  constructor(
+    options: {
+      enableRegex?: boolean;
+      enableNer?: boolean;
+      enableLlm?: boolean;
+      apiKey?: string;
+      model?: string;
+    } = {}
+  ) {
     this.enableRegex = options.enableRegex !== undefined ? options.enableRegex : true;
     this.enableNer = options.enableNer !== undefined ? options.enableNer : true;
     this.enableLlm = options.enableLlm !== undefined ? options.enableLlm : false;
     this.regexDetector = new RegexDetector();
     this.nerDetector = new NERDetector();
+    this.llmDetector = new LLMDetector(options.apiKey, options.model);
+  }
+
+  isLlmAvailable(): boolean {
+    return this.llmDetector.isAvailable();
   }
 
   detect(text: string): PIIEntity[] {
@@ -248,6 +467,29 @@ export class HybridDetector {
       candidates.push(...this.nerDetector.detect(text));
     }
 
+    return this.resolveCandidates(candidates);
+  }
+
+  async detectAsync(text: string): Promise<PIIEntity[]> {
+    const candidates: PIIEntity[] = [];
+
+    if (this.enableRegex) {
+      candidates.push(...this.regexDetector.detect(text));
+    }
+
+    if (this.enableNer) {
+      candidates.push(...this.nerDetector.detect(text));
+    }
+
+    if (this.enableLlm && this.llmDetector.isAvailable()) {
+      const llmCandidates = await this.llmDetector.detect(text);
+      candidates.push(...llmCandidates);
+    }
+
+    return this.resolveCandidates(candidates);
+  }
+
+  private resolveCandidates(candidates: PIIEntity[]): PIIEntity[] {
     if (candidates.length === 0) {
       return [];
     }
@@ -284,7 +526,7 @@ export class HybridDetector {
     // Sort by start asc, length desc
     deduped.sort((a, b) => {
       if (a.start !== b.start) return a.start - b.start;
-      return (b.end - b.start) - (a.end - a.start);
+      return b.end - b.start - (a.end - a.start);
     });
 
     // Resolve overlapping intervals

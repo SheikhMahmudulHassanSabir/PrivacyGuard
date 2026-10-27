@@ -9,7 +9,15 @@ import {
   ConfAIDEMethod,
 } from '../lib/methods';
 import { MethodResult, PrivacyCase } from '../types/privacy';
-import { Scale, ChevronDown, ChevronUp, Clock, Terminal } from 'lucide-react';
+import {
+  Scale,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Terminal,
+  Loader2,
+  AlertCircle,
+} from 'lucide-react';
 
 export const CompareMethodsView: React.FC = () => {
   const defaultContext =
@@ -20,6 +28,9 @@ export const CompareMethodsView: React.FC = () => {
   const [recipient, setRecipient] = useState<string>('doctor');
   const [purpose, setPurpose] = useState<string>('treatment');
   const [detectorMode, setDetectorMode] = useState<string>('Hybrid (Regex + NER)');
+
+  const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [comparisonResults, setComparisonResults] = useState<MethodResult[] | null>(null);
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({
@@ -34,34 +45,54 @@ export const CompareMethodsView: React.FC = () => {
     setExpandedRows((prev) => ({ ...prev, [m]: !prev[m] }));
   };
 
-  const handleCompare = (e: React.FormEvent) => {
+  const handleCompare = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
 
+    const enableLlm = detectorMode.includes('LLM');
     const enableRegex = detectorMode.includes('Regex') || detectorMode.includes('Hybrid');
     const enableNer = detectorMode.includes('NER') || detectorMode.includes('Hybrid');
 
     const detector = new HybridDetector({
       enableRegex,
       enableNer,
-      enableLlm: false,
+      enableLlm,
     });
 
-    const caseData: PrivacyCase = {
-      case_id: 'cmp_' + Date.now().toString(36),
-      context,
-      query,
-      recipient,
-      purpose,
-      entities: [],
-    };
+    if (enableLlm && !detector.isLlmAvailable()) {
+      setErrorMsg(
+        'Google Gemini API key not found. Please configure your API key in the Interactive Test view or define VITE_GEMINI_API_KEY.'
+      );
+      return;
+    }
 
-    const res1 = new PIIvotMethod(detector).run(caseData);
-    const res2 = new PRvLMethod(detector).run(caseData);
-    const res3 = new PIIBenchMethod(detector).run(caseData);
-    const res4 = new PrivacyLensMethod(detector).run(caseData);
-    const res5 = new ConfAIDEMethod(detector).run(caseData);
+    setIsRunning(true);
+    try {
+      const caseData: PrivacyCase = {
+        case_id: 'cmp_' + Date.now().toString(36),
+        context,
+        query,
+        recipient,
+        purpose,
+        entities: [],
+      };
 
-    setComparisonResults([res1, res2, res3, res4, res5]);
+      const entities = enableLlm
+        ? await detector.detectAsync(context)
+        : detector.detect(context);
+
+      const res1 = new PIIvotMethod(detector).run(caseData, entities);
+      const res2 = new PRvLMethod(detector).run(caseData, entities);
+      const res3 = new PIIBenchMethod(detector).run(caseData, entities);
+      const res4 = new PrivacyLensMethod(detector).run(caseData, entities);
+      const res5 = new ConfAIDEMethod(detector).run(caseData, entities);
+
+      setComparisonResults([res1, res2, res3, res4, res5]);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Error occurred during comparative execution.');
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   return (
@@ -72,6 +103,25 @@ export const CompareMethodsView: React.FC = () => {
         subtitle="Compare how all five privacy methods respond to the exact same input case and contextual constraints."
         badgeText="Multi-Method Diff"
       />
+
+      {errorMsg && (
+        <div className="flex items-start gap-3 p-4 bg-neutral-50 border border-neutral-900 text-neutral-950 text-xs">
+          <AlertCircle className="w-4 h-4 text-neutral-900 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <span className="font-bold block">Comparison Notification</span>
+            <p className="mt-0.5 font-mono text-[11px] text-neutral-700 leading-relaxed">
+              {errorMsg}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMsg(null)}
+            className="text-neutral-500 hover:text-neutral-950 text-xs font-semibold cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Form */}
       <form
@@ -148,7 +198,12 @@ export const CompareMethodsView: React.FC = () => {
                 Detector Mode
               </label>
               <div className="flex flex-wrap gap-5 pt-1.5 text-xs">
-                {['Hybrid (Regex + NER)', 'Regex Only', 'NER Only'].map((mode) => (
+                {[
+                  'Hybrid (Regex + NER)',
+                  'Hybrid + Gemini LLM',
+                  'Regex Only',
+                  'NER Only',
+                ].map((mode) => (
                   <label key={mode} className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
@@ -169,10 +224,20 @@ export const CompareMethodsView: React.FC = () => {
         <div className="pt-2">
           <button
             type="submit"
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-neutral-950 hover:bg-neutral-800 transition-colors cursor-pointer whitespace-nowrap"
+            disabled={isRunning}
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-neutral-950 hover:bg-neutral-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors cursor-pointer whitespace-nowrap"
           >
-            <Scale className="w-3.5 h-3.5" />
-            <span>Compare All Five Methods</span>
+            {isRunning ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Running Gemini LLM Comparison...</span>
+              </>
+            ) : (
+              <>
+                <Scale className="w-3.5 h-3.5" />
+                <span>Compare All Five Methods</span>
+              </>
+            )}
           </button>
         </div>
       </form>

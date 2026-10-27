@@ -68,9 +68,9 @@ export class PIIvotMethod {
     return surrogate;
   }
 
-  run(caseData: PrivacyCase): MethodResult {
+  run(caseData: PrivacyCase, precomputedEntities?: PIIEntity[]): MethodResult {
     const start = performance.now();
-    const entities = this.detector.detect(caseData.context);
+    const entities = precomputedEntities ?? this.detector.detect(caseData.context);
 
     // Replace in reverse order
     const sorted = [...entities].sort((a, b) => b.start - a.start);
@@ -101,6 +101,11 @@ export class PIIvotMethod {
       }
     };
   }
+
+  async runAsync(caseData: PrivacyCase): Promise<MethodResult> {
+    const entities = await this.detector.detectAsync(caseData.context);
+    return this.run(caseData, entities);
+  }
 }
 
 // -------------------------------------------------------------
@@ -118,9 +123,9 @@ export class PRvLMethod {
 
   constructor(private detector: HybridDetector = new HybridDetector()) {}
 
-  run(caseData: PrivacyCase): MethodResult {
+  run(caseData: PrivacyCase, precomputedEntities?: PIIEntity[]): MethodResult {
     const start = performance.now();
-    const entities = this.detector.detect(caseData.context);
+    const entities = precomputedEntities ?? this.detector.detect(caseData.context);
 
     const symbolicMap: Record<string, string> = {};
     const typeCounters: Record<string, number> = {};
@@ -171,6 +176,11 @@ export class PRvLMethod {
       }
     };
   }
+
+  async runAsync(caseData: PrivacyCase): Promise<MethodResult> {
+    const entities = await this.detector.detectAsync(caseData.context);
+    return this.run(caseData, entities);
+  }
 }
 
 // -------------------------------------------------------------
@@ -214,9 +224,9 @@ export class PIIBenchMethod {
     return false;
   }
 
-  run(caseData: PrivacyCase): MethodResult {
+  run(caseData: PrivacyCase, precomputedEntities?: PIIEntity[]): MethodResult {
     const start = performance.now();
-    const entities = this.detector.detect(caseData.context);
+    const entities = precomputedEntities ?? this.detector.detect(caseData.context);
 
     const queryText = (caseData.query || '').toLowerCase();
     const purposeText = (caseData.purpose || '').toLowerCase();
@@ -260,6 +270,11 @@ export class PIIBenchMethod {
         strategy: 'query_aware_selective_retention'
       }
     };
+  }
+
+  async runAsync(caseData: PrivacyCase): Promise<MethodResult> {
+    const entities = await this.detector.detectAsync(caseData.context);
+    return this.run(caseData, entities);
   }
 }
 
@@ -355,9 +370,9 @@ export class PrivacyLensMethod {
     };
   }
 
-  run(caseData: PrivacyCase): MethodResult {
+  run(caseData: PrivacyCase, precomputedEntities?: PIIEntity[]): MethodResult {
     const start = performance.now();
-    const entities = this.detector.detect(caseData.context);
+    const entities = precomputedEntities ?? this.detector.detect(caseData.context);
     const infoTypes = new Set(entities.map((e) => e.pii_type));
 
     const { decision, reasoning } = this.evaluateCiNorms(
@@ -398,6 +413,11 @@ export class PrivacyLensMethod {
         strategy: 'contextual_integrity_norm_evaluation'
       }
     };
+  }
+
+  async runAsync(caseData: PrivacyCase): Promise<MethodResult> {
+    const entities = await this.detector.detectAsync(caseData.context);
+    return this.run(caseData, entities);
   }
 }
 
@@ -519,9 +539,9 @@ export class ConfAIDEMethod {
     };
   }
 
-  run(caseData: PrivacyCase): MethodResult {
+  run(caseData: PrivacyCase, precomputedEntities?: PIIEntity[]): MethodResult {
     const start = performance.now();
-    const entities = this.detector.detect(caseData.context);
+    const entities = precomputedEntities ?? this.detector.detect(caseData.context);
     const entityTypes = new Set(entities.map((e) => e.pii_type));
 
     const domain = this.inferDomain(caseData.context);
@@ -566,20 +586,37 @@ export class ConfAIDEMethod {
       }
     };
   }
+
+  async runAsync(caseData: PrivacyCase): Promise<MethodResult> {
+    const entities = await this.detector.detectAsync(caseData.context);
+    return this.run(caseData, entities);
+  }
 }
 
-export function runAllMethods(caseData: PrivacyCase, detector: HybridDetector): Record<string, MethodResult> {
-  const m1 = new PIIvotMethod(detector).run(caseData);
-  const m2 = new PRvLMethod(detector).run(caseData);
-  const m3 = new PIIBenchMethod(detector).run(caseData);
-  const m4 = new PrivacyLensMethod(detector).run(caseData);
-  const m5 = new ConfAIDEMethod(detector).run(caseData);
+export function runAllMethods(
+  caseData: PrivacyCase,
+  detector: HybridDetector,
+  precomputedEntities?: PIIEntity[]
+): Record<string, MethodResult> {
+  const m1 = new PIIvotMethod(detector).run(caseData, precomputedEntities);
+  const m2 = new PRvLMethod(detector).run(caseData, precomputedEntities);
+  const m3 = new PIIBenchMethod(detector).run(caseData, precomputedEntities);
+  const m4 = new PrivacyLensMethod(detector).run(caseData, precomputedEntities);
+  const m5 = new ConfAIDEMethod(detector).run(caseData, precomputedEntities);
 
   return {
     piivot: m1,
     prvl: m2,
     pii_bench: m3,
     privacylens: m4,
-    confaide: m5
+    confaide: m5,
   };
+}
+
+export async function runAllMethodsAsync(
+  caseData: PrivacyCase,
+  detector: HybridDetector
+): Promise<Record<string, MethodResult>> {
+  const entities = await detector.detectAsync(caseData.context);
+  return runAllMethods(caseData, detector, entities);
 }
