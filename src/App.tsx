@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import initialRunData from './data/latest_run.json';
 import { ExperimentRunData } from './types/privacy';
+import { safeLoadStorage, safeSaveStorage } from './lib/exportUtils';
 import { OverviewView } from './views/OverviewView';
 import { InteractiveTestView } from './views/InteractiveTestView';
 import { CompareMethodsView } from './views/CompareMethodsView';
@@ -17,9 +18,36 @@ import {
   X,
 } from 'lucide-react';
 
+const STORAGE_RUNS_KEY = 'privacyguard_saved_runs_v1';
+const STORAGE_ACTIVE_ID_KEY = 'privacyguard_active_run_id_v1';
+
 export function App() {
   const [activeView, setActiveView] = useState<string>('overview');
-  const [currentRunData, setCurrentRunData] = useState<ExperimentRunData>(initialRunData as any);
+  const [savedRuns, setSavedRuns] = useState<ExperimentRunData[]>(() => {
+    const baseline = initialRunData as unknown as ExperimentRunData;
+    const stored = safeLoadStorage<ExperimentRunData[]>(STORAGE_RUNS_KEY, []);
+    if (Array.isArray(stored) && stored.length > 0) {
+      const hasBaseline = stored.some(
+        (r) => r?.run_metadata?.run_id === baseline.run_metadata?.run_id
+      );
+      return hasBaseline ? stored : [...stored, baseline];
+    }
+    return [baseline];
+  });
+
+  const [currentRunData, setCurrentRunData] = useState<ExperimentRunData>(() => {
+    const baseline = initialRunData as unknown as ExperimentRunData;
+    const activeId = safeLoadStorage<string>(STORAGE_ACTIVE_ID_KEY, '');
+    if (activeId) {
+      const stored = safeLoadStorage<ExperimentRunData[]>(STORAGE_RUNS_KEY, []);
+      const match = Array.isArray(stored)
+        ? stored.find((r) => r?.run_metadata?.run_id === activeId)
+        : undefined;
+      if (match) return match;
+    }
+    return baseline;
+  });
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
   const navItems = [
@@ -36,6 +64,27 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleSaveNewRun = (newRun: ExperimentRunData) => {
+    setCurrentRunData(newRun);
+    setSavedRuns((prev) => {
+      const filtered = prev.filter(
+        (r) => r?.run_metadata?.run_id !== newRun.run_metadata?.run_id
+      );
+      const updated = [newRun, ...filtered].slice(0, 6);
+      // Persist lightweight run summaries if full payload exceeds storage quota
+      if (!safeSaveStorage(STORAGE_RUNS_KEY, updated)) {
+        safeSaveStorage(STORAGE_RUNS_KEY, [newRun]);
+      }
+      safeSaveStorage(STORAGE_ACTIVE_ID_KEY, newRun.run_metadata?.run_id || '');
+      return updated;
+    });
+  };
+
+  const handleUpdateActiveRun = (run: ExperimentRunData) => {
+    setCurrentRunData(run);
+    safeSaveStorage(STORAGE_ACTIVE_ID_KEY, run.run_metadata?.run_id || '');
+  };
+
   return (
     <div className="min-h-screen bg-white text-neutral-950 flex flex-col font-sans">
       {/* Three-Zone Top Bar Contract */}
@@ -45,14 +94,17 @@ export function App() {
           <button
             type="button"
             onClick={() => handleNavigate('overview')}
-            className="flex items-center gap-2.5 text-base font-bold tracking-tight text-neutral-950 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none"
+            className="flex items-center gap-2.5 text-base font-bold tracking-tight text-neutral-950 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950"
           >
             <Shield className="w-5 h-5 text-neutral-950 stroke-[2]" />
             <span>PrivacyGuard</span>
           </button>
 
           {/* Zone 2: Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-6 overflow-x-auto h-full">
+          <nav
+            aria-label="Primary Navigation"
+            className="hidden md:flex items-center gap-6 overflow-x-auto h-full"
+          >
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeView === item.id;
@@ -60,8 +112,9 @@ export function App() {
                 <button
                   key={item.id}
                   type="button"
+                  aria-current={isActive ? 'page' : undefined}
                   onClick={() => handleNavigate(item.id)}
-                  className={`h-full inline-flex items-center gap-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 border-b-2 cursor-pointer ${
+                  className={`h-full inline-flex items-center gap-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 border-b-2 cursor-pointer focus-visible:outline-none ${
                     isActive
                       ? 'border-neutral-950 text-neutral-950'
                       : 'border-transparent text-neutral-500 hover:text-neutral-950'
@@ -105,7 +158,7 @@ export function App() {
         {/* Mobile Dropdown Navigation Menu */}
         {isMobileMenuOpen && (
           <div className="md:hidden border-t border-neutral-200 bg-white px-4 pt-2 pb-4 space-y-2 shadow-lg animate-in slide-in-from-top-2">
-            <nav className="flex flex-col space-y-1">
+            <nav aria-label="Mobile Navigation" className="flex flex-col space-y-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeView === item.id;
@@ -113,6 +166,7 @@ export function App() {
                   <button
                     key={item.id}
                     type="button"
+                    aria-current={isActive ? 'page' : undefined}
                     onClick={() => handleNavigate(item.id)}
                     className={`flex items-center gap-3 w-full px-3 py-2.5 rounded text-xs font-semibold transition-colors cursor-pointer ${
                       isActive
@@ -120,7 +174,11 @@ export function App() {
                         : 'text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 shrink-0 stroke-[1.75] ${isActive ? 'text-white' : 'text-neutral-600'}`} />
+                    <Icon
+                      className={`w-4 h-4 shrink-0 stroke-[1.75] ${
+                        isActive ? 'text-white' : 'text-neutral-600'
+                      }`}
+                    />
                     <span>{item.label}</span>
                   </button>
                 );
@@ -155,7 +213,9 @@ export function App() {
           <RunExperimentView
             corpusData={initialRunData as any}
             currentData={currentRunData}
-            onUpdateActiveRun={(newData) => setCurrentRunData(newData)}
+            savedRuns={savedRuns}
+            onSaveNewRun={handleSaveNewRun}
+            onUpdateActiveRun={handleUpdateActiveRun}
             onNavigateToDashboard={() => handleNavigate('dashboard')}
           />
         )}

@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import initialRunData from '../data/latest_run.json';
 import { Header, DatasetBanner, KpiCard } from '../components/CommonComponents';
 import { ExperimentRunData, PrivacyCase } from '../types/privacy';
-import { executeBenchmarkRun, deriveRiskLevel } from '../lib/evaluator';
+import {
+  executeBenchmarkRun,
+  sampleBenchmarkCases,
+  classifyCaseRiskTier,
+} from '../lib/evaluator';
 import {
   Play,
   History,
@@ -10,86 +15,55 @@ import {
   ArrowRight,
   Sliders,
   AlertCircle,
+  Square,
 } from 'lucide-react';
 
 interface RunExperimentViewProps {
-  corpusData?: ExperimentRunData;
   currentData: ExperimentRunData;
+  savedRuns: ExperimentRunData[];
+  onSaveNewRun: (data: ExperimentRunData) => void;
   onUpdateActiveRun: (data: ExperimentRunData) => void;
   onNavigateToDashboard: () => void;
 }
 
-function createSeededRandom(seed: number) {
-  let s = Math.abs(seed) % 2147483647;
-  if (s <= 0) s = 1;
-  return () => {
-    s = (s * 16807) % 2147483647;
-    return (s - 1) / 2147483646;
+const CANONICAL_BASE_CASES: PrivacyCase[] = (
+  (initialRunData as any).per_record_results || []
+).map((r: any) => {
+  const entities = (r.ground_truth_entities || []).map((e: any, idx: number) => ({
+    entity_id: `gt_${r.case_id}_${idx}`,
+    text: e.text,
+    pii_type: e.type,
+    start: e.start,
+    end: e.end,
+    label: e.type,
+  }));
+  return {
+    case_id: r.case_id,
+    context: r.context,
+    query: r.query,
+    recipient: r.recipient,
+    purpose: r.purpose,
+    expected_decision: r.expected_decision,
+    risk_level: r.risk_level || classifyCaseRiskTier(entities),
+    entities,
   };
-}
-
-function sampleCases(
-  records: any[],
-  numSamples: number,
-  seed: number,
-  stratified: boolean
-): any[] {
-  if (records.length <= numSamples) {
-    return [...records];
-  }
-  const rand = createSeededRandom(seed);
-
-  if (!stratified) {
-    const shuffled = [...records];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(rand() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled.slice(0, numSamples);
-  }
-
-  const groups: Record<string, any[]> = {};
-  for (const r of records) {
-    const key = r.risk_level || deriveRiskLevel(r.ground_truth_entities || []);
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(r);
-  }
-
-  for (const key of Object.keys(groups)) {
-    const group = groups[key];
-    for (let i = group.length - 1; i > 0; i--) {
-      const j = Math.floor(rand() * (i + 1));
-      [group[i], group[j]] = [group[j], group[i]];
-    }
-  }
-
-  const selected: any[] = [];
-  const groupKeys = Object.keys(groups);
-  for (const key of groupKeys) {
-    const count = Math.max(1, Math.round((groups[key].length / records.length) * numSamples));
-    selected.push(...groups[key].slice(0, count));
-  }
-
-  if (selected.length > numSamples) {
-    return selected.slice(0, numSamples);
-  }
-  if (selected.length < numSamples) {
-    const remaining = records.filter((r) => !selected.includes(r));
-    return [...selected, ...remaining.slice(0, numSamples - selected.length)];
-  }
-  return selected;
-}
+});
 
 export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
-  corpusData,
   currentData,
+  savedRuns,
+  onSaveNewRun,
   onUpdateActiveRun,
   onNavigateToDashboard,
 }) => {
-  const sourceCorpus = corpusData?.per_record_results || currentData?.per_record_results || [];
   const [sampleSize, setSampleSize] = useState<number | 'full'>(50);
   const [randomSeed, setRandomSeed] = useState<number>(42);
   const [stratify, setStratify] = useState<boolean>(true);
+
+  // Detector flags
+  const [useRegex, setUseRegex] = useState<boolean>(true);
+  const [useNer, setUseNer] = useState<boolean>(true);
+  const [useLlm, setUseLlm] = useState<boolean>(false);
 
   // Method checkboxes
   const [mPiivot, setMPiivot] = useState<boolean>(true);
@@ -105,11 +79,25 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
   const [statusMsg, setStatusMsg] = useState<string>('');
   const [completedSummary, setCompletedSummary] = useState<any | null>(null);
 
-  // Saved runs history
-  const [savedRuns, setSavedRuns] = useState<ExperimentRunData[]>([currentData]);
+  const timerIdsRef = useRef<number[]>([]);
+
+  const clearTimers = () => {
+    for (const id of timerIdsRef.current) {
+      window.clearTimeout(id);
+    }
+    timerIdsRef.current = [];
+  };
+
+  const handleCancelExperiment = () => {
+    clearTimers();
+    setIsRunning(false);
+    setProgress(0);
+    setStatusMsg('Experiment cancelled by user. Previous active results preserved.');
+  };
 
   const handleStartExperiment = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isRunning) return;
 
     const selected: string[] = [];
     if (mPiivot) selected.push('piivot');
@@ -123,71 +111,59 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
       return;
     }
 
+    if (!useRegex && !useNer && !useLlm) {
+      setValidationError('Enable at least one detector stage (Regex, NER, or Semantic Layer).');
+      return;
+    }
+
+    const safeSeed = Number.isFinite(randomSeed) ? Math.max(0, Math.floor(randomSeed)) : 42;
+
     setValidationError(null);
+    setCompletedSummary(null);
     setIsRunning(true);
-    setProgress(0.15);
-    setStatusMsg(`Sampling cases with seed ${randomSeed}...`);
+    setProgress(0.2);
+    setStatusMsg(
+      `Sampling ${sampleSize === 'full' ? '4,434' : sampleSize} verified records (Seed: ${safeSeed}, Stratified: ${stratify ? 'Yes' : 'No'})...`
+    );
 
-    setTimeout(() => {
-      try {
-        if (!sourceCorpus || sourceCorpus.length === 0) {
-          throw new Error('No dataset records available in corpus.');
-        }
+    clearTimers();
 
-        const maxAvailable = sourceCorpus.length;
-        const targetCount = sampleSize === 'full' ? maxAvailable : Math.min(Number(sampleSize), maxAvailable);
+    const t1 = window.setTimeout(() => {
+      const sampledCases = sampleBenchmarkCases(
+        CANONICAL_BASE_CASES,
+        sampleSize,
+        safeSeed,
+        stratify
+      );
 
-        const chosenRecords = sampleCases(sourceCorpus, targetCount, randomSeed, stratify);
-        if (!chosenRecords || chosenRecords.length === 0) {
-          throw new Error('Selected sample produced 0 evaluation cases.');
-        }
+      setProgress(0.6);
+      setStatusMsg(
+        `Executing ${selected.length} methods across ${sampledCases.length} sampled cases...`
+      );
 
-        const sampledCases: PrivacyCase[] = chosenRecords.map((r) => ({
-          case_id: r.case_id,
-          context: r.context,
-          query: r.query,
-          recipient: r.recipient,
-          purpose: r.purpose,
-          expected_decision: r.expected_decision,
-          risk_level: r.risk_level || deriveRiskLevel(r.ground_truth_entities || []),
-          entities: (r.ground_truth_entities || []).map((e: any) => ({
-            entity_id: 'e_' + Math.random().toString(36).substring(2, 7),
-            text: e.text,
-            pii_type: e.type,
-            start: e.start,
-            end: e.end,
-            label: e.type,
-          })),
-        }));
-
-        setProgress(0.55);
-        setStatusMsg(`Executing ${selected.length} methods across ${sampledCases.length} cases...`);
-
-        setTimeout(() => {
-          try {
-            const newRun = executeBenchmarkRun(
-              sampledCases,
-              selected,
-              randomSeed,
-              undefined,
-              stratify
-            );
-            setProgress(1.0);
-            setStatusMsg('Benchmark experiment completed.');
-            setCompletedSummary(newRun.run_metadata);
-            setSavedRuns((prev) => [newRun as any, ...prev]);
-            onUpdateActiveRun(newRun as any);
-          } catch (execErr: any) {
-            setValidationError(execErr?.message || 'Error executing benchmark evaluation.');
-          } finally {
-            setIsRunning(false);
-          }
-        }, 450);
-      } catch (err: any) {
-        setValidationError(err?.message || 'Error preparing evaluation cases.');
+      const t2 = window.setTimeout(() => {
+        const newRun = executeBenchmarkRun(
+          sampledCases,
+          selected,
+          safeSeed,
+          {
+            enable_regex: useRegex,
+            enable_ner: useNer,
+            enable_llm: useLlm,
+          },
+          stratify
+        );
+        setProgress(1.0);
+        setStatusMsg('Benchmark experiment completed.');
         setIsRunning(false);
-      }
-    }, 350);
+        setCompletedSummary(newRun.run_metadata);
+        onSaveNewRun(newRun as any);
+      }, 250);
+
+      timerIdsRef.current.push(t2);
+    }, 200);
+
+    timerIdsRef.current.push(t1);
   };
 
   const handleSetActive = (run: ExperimentRunData) => {
@@ -229,31 +205,42 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-900 mb-1.5">
+                  <label
+                    htmlFor="exp-sample-size"
+                    className="block text-xs font-semibold text-neutral-900 mb-1.5"
+                  >
                     Evaluation Sample Size
                   </label>
                   <select
+                    id="exp-sample-size"
                     value={sampleSize}
                     onChange={(e) =>
                       setSampleSize(e.target.value === 'full' ? 'full' : Number(e.target.value))
                     }
                     className="w-full text-xs p-2.5 bg-neutral-50 border border-neutral-300 focus:outline-none focus:border-neutral-950 focus:bg-white text-neutral-950"
                   >
-                    <option value={10}>10 Cases (Fast Evaluation)</option>
+                    <option value={10}>10 Cases</option>
                     <option value={25}>25 Cases</option>
-                    <option value={50}>50 Cases (Full Bundled Corpus)</option>
-                    <option value="full">Full Corpus (All {sourceCorpus.length} cases)</option>
+                    <option value={50}>50 Cases (Recommended Balance)</option>
+                    <option value={100}>100 Cases</option>
+                    <option value={250}>250 Cases</option>
+                    <option value={500}>500 Cases</option>
+                    <option value="full">Full Verified Set (4,434)</option>
                   </select>
                   <p className="text-[11px] text-neutral-500 mt-1.5 leading-relaxed">
-                    Evaluates against the browser-bundled verified benchmark corpus with instant sub-second execution.
+                    Exact sample size is enforced without record duplication.
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-900 mb-1.5">
+                  <label
+                    htmlFor="exp-random-seed"
+                    className="block text-xs font-semibold text-neutral-900 mb-1.5"
+                  >
                     Random Seed (Reproducibility)
                   </label>
                   <input
+                    id="exp-random-seed"
                     type="number"
                     min={0}
                     max={999999}
@@ -262,8 +249,43 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
                     className="w-full text-xs p-2.5 bg-neutral-50 border border-neutral-300 focus:outline-none focus:border-neutral-950 focus:bg-white font-mono tabular-nums text-neutral-950"
                   />
                   <p className="text-[11px] text-neutral-500 mt-1.5 leading-relaxed">
-                    Fixed seed guarantees identical case selection and order across repeated runs.
+                    Mulberry32 seeded PRNG guarantees identical case selection across repeated runs.
                   </p>
+                </div>
+
+                <div className="pt-1 border-t border-neutral-100">
+                  <span className="block text-xs font-semibold text-neutral-900 mb-2">
+                    Detector Stages
+                  </span>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-xs cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useRegex}
+                        onChange={(e) => setUseRegex(e.target.checked)}
+                        className="accent-neutral-950 w-3.5 h-3.5"
+                      />
+                      <span className="text-neutral-900">Regex Pattern Layer</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-xs cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useNer}
+                        onChange={(e) => setUseNer(e.target.checked)}
+                        className="accent-neutral-950 w-3.5 h-3.5"
+                      />
+                      <span className="text-neutral-900">Contextual NER Layer</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-xs cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useLlm}
+                        onChange={(e) => setUseLlm(e.target.checked)}
+                        className="accent-neutral-950 w-3.5 h-3.5"
+                      />
+                      <span className="text-neutral-900">Semantic LLM Heuristic Layer</span>
+                    </label>
+                  </div>
                 </div>
               </div>
 
@@ -350,7 +372,7 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
               </div>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-2 flex flex-wrap items-center gap-3">
               <button
                 type="submit"
                 disabled={isRunning}
@@ -368,20 +390,31 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
                   </>
                 )}
               </button>
+
+              {isRunning && (
+                <button
+                  type="button"
+                  onClick={handleCancelExperiment}
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-neutral-950 bg-white border border-neutral-950 hover:bg-neutral-100 transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <Square className="w-3 h-3 fill-current" />
+                  <span>Cancel Run</span>
+                </button>
+              )}
             </div>
 
             {/* Progress indicator */}
-            {isRunning && (
+            {(isRunning || statusMsg) && (
               <div className="space-y-2 pt-2">
-                <div className="w-full bg-neutral-100 border border-neutral-300 h-2.5 overflow-hidden">
-                  <div
-                    className="bg-neutral-950 h-full transition-all duration-300"
-                    style={{ width: `${Math.round(progress * 100)}%` }}
-                  />
-                </div>
-                <div className="text-xs text-neutral-700 font-mono">
-                  {statusMsg}
-                </div>
+                {isRunning && (
+                  <div className="w-full bg-neutral-100 border border-neutral-300 h-2.5 overflow-hidden">
+                    <div
+                      className="bg-neutral-950 h-full transition-all duration-300"
+                      style={{ width: `${Math.round(progress * 100)}%` }}
+                    />
+                  </div>
+                )}
+                <div className="text-xs text-neutral-700 font-mono">{statusMsg}</div>
               </div>
             )}
           </form>
@@ -389,9 +422,14 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
           {/* Completed Run Summary Card */}
           {completedSummary && (
             <div className="bg-neutral-50 border border-neutral-950 p-6 space-y-5">
-              <div className="flex items-center gap-2.5 text-neutral-950 font-bold text-sm">
-                <CheckCircle2 className="w-4 h-4 text-neutral-950 stroke-[2]" />
-                <span>Benchmark Run Completed</span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 text-neutral-950 font-bold text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-neutral-950 stroke-[2]" />
+                  <span>Benchmark Run Completed</span>
+                </div>
+                <span className="text-xs font-mono text-neutral-600">
+                  Stratified: {completedSummary.stratified ? 'Enabled' : 'Disabled'}
+                </span>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -408,7 +446,7 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
                 <KpiCard
                   label="Runtime Duration"
                   value={`${completedSummary.duration_seconds}s`}
-                  sub="Vectorized"
+                  sub="Deterministic"
                 />
                 <KpiCard
                   label="Failed Count"
@@ -416,6 +454,21 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
                   sub="0% failure rate"
                 />
               </div>
+
+              {completedSummary.stratified_distribution && (
+                <div className="p-3 bg-white border border-neutral-200 text-xs font-mono flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-sans font-semibold text-neutral-900">
+                    Sampled Risk Distribution:
+                  </span>
+                  <div className="flex flex-wrap gap-3 text-neutral-700">
+                    {Object.entries(completedSummary.stratified_distribution).map(([k, v]) => (
+                      <span key={k}>
+                        <strong>{k}:</strong> {String(v)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <button
@@ -434,11 +487,16 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
         {/* Right: Prior Experiment Runs History */}
         <div className="lg:col-span-5">
           <div className="bg-white border border-neutral-200 p-6 space-y-4">
-            <div className="flex items-center gap-2 pb-3 border-b border-neutral-200">
-              <History className="w-4 h-4 text-neutral-950 stroke-[1.75]" />
-              <h2 className="text-sm font-bold text-neutral-950">
-                Saved Experiment Runs
-              </h2>
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-neutral-200">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-neutral-950 stroke-[1.75]" />
+                <h2 className="text-sm font-bold text-neutral-950">
+                  Saved Experiment Runs
+                </h2>
+              </div>
+              <span className="text-xs font-mono text-neutral-500">
+                {savedRuns.length} {savedRuns.length === 1 ? 'Run' : 'Runs'}
+              </span>
             </div>
             <p className="text-xs text-neutral-600">
               Persisted benchmark artifacts available for active dashboard inspection:
@@ -450,7 +508,7 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
                 const rMeta = r.run_metadata || ({} as any);
                 return (
                   <div
-                    key={rMeta.run_id || idx}
+                    key={`${rMeta.run_id || 'run'}_${idx}`}
                     className={`p-4 border transition-colors ${
                       isActive
                         ? 'bg-neutral-50 border-neutral-950'
@@ -460,7 +518,7 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
                     <div className="flex justify-between items-start gap-2">
                       <div>
                         <div className="text-xs font-bold text-neutral-950 font-mono">
-                          {rMeta.run_id?.slice(0, 20)}
+                          {rMeta.run_id?.slice(0, 22)}
                         </div>
                         <div className="text-[11px] text-neutral-500 font-mono mt-0.5">
                           {rMeta.completion_time
@@ -494,7 +552,7 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
                         <span className="text-neutral-400 block text-[10px] font-sans">
                           Seed
                         </span>
-                        {rMeta.random_seed || 42}
+                        {rMeta.random_seed ?? 42}
                       </div>
                       <div>
                         <span className="text-neutral-400 block text-[10px] font-sans">

@@ -7,7 +7,8 @@ import {
   AlertCircle,
   Minus,
 } from 'lucide-react';
-import { DatasetValidationReport } from '../types/privacy';
+import { DatasetValidationReport, PIIEntity } from '../types/privacy';
+import { prepareSafeReplacementSpans } from '../lib/methods';
 
 interface HeaderProps {
   title: string;
@@ -50,14 +51,23 @@ export const DatasetBanner: React.FC<{ report: DatasetValidationReport }> = ({ r
         <div className="flex items-center gap-2.5">
           <ShieldCheck className="w-4 h-4 text-neutral-950 shrink-0 stroke-[1.75]" />
           <span className="text-xs sm:text-sm text-neutral-900 font-medium">
-            Dataset Verified: <strong className="font-mono font-semibold tabular-nums">{report.total_csv_records?.toLocaleString() || '4,434'}</strong> cases &{' '}
-            <strong className="font-mono font-semibold tabular-nums">{report.total_entities?.toLocaleString() || '22,226'}</strong> annotated ground-truth entities
+            Dataset Verified:{' '}
+            <strong className="font-mono font-semibold tabular-nums">
+              {report.total_csv_records?.toLocaleString() || '4,434'}
+            </strong>{' '}
+            cases &{' '}
+            <strong className="font-mono font-semibold tabular-nums">
+              {report.total_entities?.toLocaleString() || '22,226'}
+            </strong>{' '}
+            annotated ground-truth entities
           </span>
         </div>
         <div className="text-xs text-neutral-500 font-mono flex items-center gap-2">
           <span>Dataset Fingerprint</span>
           <span aria-hidden="true">·</span>
-          <span className="text-neutral-900">{report.fingerprint || 'csv_e28fb80c1095_json_f4229455a3e3'}</span>
+          <span className="text-neutral-900">
+            {report.fingerprint || 'csv_e28fb80c1095_json_f4229455a3e3'}
+          </span>
         </div>
       </div>
     );
@@ -97,9 +107,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
       title={helpText}
     >
       <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="text-xs font-medium text-neutral-500">
-          {label}
-        </span>
+        <span className="text-xs font-medium text-neutral-500">{label}</span>
         {icon && <span className="text-neutral-400">{icon}</span>}
       </div>
       <div className="text-2xl font-bold text-neutral-950 font-mono tabular-nums tracking-tight leading-none">
@@ -136,7 +144,9 @@ export const MethodBadge: React.FC<{ method: string }> = ({ method }) => {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs">
       <strong className="font-semibold text-neutral-950">{entry.name}</strong>
-      <span className="text-neutral-400" aria-hidden="true">·</span>
+      <span className="text-neutral-400" aria-hidden="true">
+        ·
+      </span>
       <span className="text-neutral-600 font-normal">{entry.role}</span>
     </span>
   );
@@ -210,4 +220,60 @@ export const RiskBadge: React.FC<{ risk?: string }> = ({ risk }) => {
         </span>
       );
   }
+};
+
+/**
+ * Renders source text with inline monochrome annotations for detected PII spans,
+ * visually separating original text from detected entity boundaries.
+ */
+export const AnnotatedTextHighlighter: React.FC<{
+  text: string;
+  entities: PIIEntity[];
+}> = ({ text, entities }) => {
+  if (!text) return null;
+  const safeForward = prepareSafeReplacementSpans(text, entities).sort(
+    (a, b) => a.start - b.start
+  );
+
+  if (safeForward.length === 0) {
+    return (
+      <div className="p-3.5 bg-neutral-50 border border-neutral-200 font-mono text-xs text-neutral-800 leading-relaxed whitespace-pre-wrap">
+        {text}
+      </div>
+    );
+  }
+
+  const segments: React.ReactNode[] = [];
+  let cursor = 0;
+
+  safeForward.forEach((ent, idx) => {
+    if (ent.start > cursor) {
+      segments.push(
+        <span key={`plain_${idx}`}>{text.slice(cursor, ent.start)}</span>
+      );
+    }
+    segments.push(
+      <mark
+        key={`ent_${ent.start}_${ent.end}`}
+        className="bg-neutral-950 text-white px-1.5 py-0.5 mx-0.5 font-mono text-xs inline-flex items-baseline gap-1.5 border border-neutral-950"
+        title={`${ent.pii_type} [${ent.start}:${ent.end}] (Confidence: ${(ent.confidence ?? 1.0).toFixed(2)})`}
+      >
+        <span className="font-semibold">{text.slice(ent.start, ent.end)}</span>
+        <span className="text-[10px] text-neutral-300 uppercase tracking-tight">
+          {ent.pii_type}
+        </span>
+      </mark>
+    );
+    cursor = ent.end;
+  });
+
+  if (cursor < text.length) {
+    segments.push(<span key="plain_end">{text.slice(cursor)}</span>);
+  }
+
+  return (
+    <div className="p-3.5 bg-neutral-50 border border-neutral-200 font-mono text-xs text-neutral-900 leading-loose whitespace-pre-wrap">
+      {segments}
+    </div>
+  );
 };
