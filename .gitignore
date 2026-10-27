@@ -18,3 +18,11 @@ dataset/raw_cases.csv
 dataset/evaluation_cases.csv
 dataset/annotated_cases.json
 data/results/raw_results.json
+
+# Node dependencies and build
+node_modules/
+dist/
+dist-ssr/
+*.local
+tsconfig.tsbuildinfo
+
