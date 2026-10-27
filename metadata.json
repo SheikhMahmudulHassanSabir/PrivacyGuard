@@ -1,0 +1,8 @@
+{
+  "name": "PrivacyGuard",
+  "description": "Context-Aware Personally Identifiable Information (PII) Protection & Comparative Research Benchmark Framework",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
