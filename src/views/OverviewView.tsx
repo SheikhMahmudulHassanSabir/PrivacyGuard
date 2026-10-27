@@ -28,8 +28,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ experimentData, onNa
   const methods = experimentData?.method_metrics || [];
 
   const totalCases = valReport?.total_csv_records || 4434;
-  const detF1 = detBench?.overall?.f1 ? detBench.overall.f1.toFixed(3) : '0.654';
-  const detP = detBench?.overall?.precision ? detBench.overall.precision.toFixed(3) : '0.793';
+  const detF1 = detBench?.overall?.f1 != null ? detBench.overall.f1.toFixed(3) : 'N/A';
+  const detP = detBench?.overall?.precision != null ? detBench.overall.precision.toFixed(3) : 'N/A';
 
   const paradigms = [
     {

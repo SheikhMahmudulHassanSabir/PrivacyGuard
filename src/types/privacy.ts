@@ -131,6 +131,13 @@ export interface ExperimentRunMetadata {
   stratified: boolean;
   stratified_distribution: Record<string, number>;
   dataset_fingerprint: string;
+  sample_fingerprint?: string;
+  sample_validation?: {
+    checked_cases: number;
+    checked_entities: number;
+    invalid_offsets_count: number;
+    valid: boolean;
+  };
   methods_evaluated: string[];
   failed_executions_count: number;
   detector_config: {

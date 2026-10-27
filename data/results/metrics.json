@@ -26,16 +26,16 @@
   {
     "Method": "PrivacyLens",
     "F1 Score": 0.654,
-    "Leakage Rate": 0.0,
-    "Utility Score": 0.0,
+    "Leakage Rate": null,
+    "Utility Score": null,
     "Context Awareness": 0.78,
     "Latency (ms)": 1.19
   },
   {
     "Method": "ConfAIde",
     "F1 Score": 0.654,
-    "Leakage Rate": 0.0,
-    "Utility Score": 0.0,
+    "Leakage Rate": null,
+    "Utility Score": null,
     "Context Awareness": 0.72,
     "Latency (ms)": 1.16
   }

@@ -153,6 +153,7 @@ export function App() {
         {activeView === 'compare' && <CompareMethodsView />}
         {activeView === 'experiment' && (
           <RunExperimentView
+            corpusData={initialRunData as any}
             currentData={currentRunData}
             onUpdateActiveRun={(newData) => setCurrentRunData(newData)}
             onNavigateToDashboard={() => handleNavigate('dashboard')}

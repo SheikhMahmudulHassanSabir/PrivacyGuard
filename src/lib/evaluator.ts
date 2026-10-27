@@ -5,6 +5,7 @@ import {
   DetectorBenchmark,
   MethodMetrics,
   CategoryScore,
+  RiskTier,
 } from '../types/privacy';
 import { HybridDetector } from './detectors';
 import {
@@ -44,13 +45,8 @@ export function calculateLeakageDetailed(
         });
       }
     } else {
-      let regex: RegExp;
       const escaped = cleanText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      if (cleanText.length <= 2) {
-        regex = new RegExp(`(?<![a-zA-Z0-9])${escaped}(?![a-zA-Z0-9])`, 'i');
-      } else {
-        regex = new RegExp(`\\b${escaped}\\b`, 'i');
-      }
+      const regex = new RegExp(`(?<![a-zA-Z0-9])${escaped}(?![a-zA-Z0-9])`, 'i');
 
       if (regex.test(protectedLower)) {
         leakedList.push({
@@ -330,11 +326,69 @@ export function evaluateMethodAcrossCases(
   }
 }
 
+export function deriveRiskLevel(entities: Array<{ type?: string; pii_type?: string }>): RiskTier {
+  if (!entities || entities.length === 0) return 'NONE';
+
+  const types = new Set(entities.map((e) => e.type || e.pii_type));
+  const hasName = types.has('NAME_STUDENT');
+  const hasContact = types.has('EMAIL') || types.has('PHONE_NUM');
+  const hasAddress = types.has('STREET_ADDRESS');
+  const hasLow = types.has('USERNAME') || types.has('URL_PERSONAL');
+
+  if (hasName && hasAddress && hasContact) {
+    return 'CRITICAL';
+  }
+  if (hasContact || hasAddress) {
+    return 'HIGH';
+  }
+  if (hasName) {
+    return 'MEDIUM';
+  }
+  if (hasLow) {
+    return 'LOW';
+  }
+  return 'LOW';
+}
+
+export function computeCaseFingerprint(cases: PrivacyCase[]): string {
+  if (!cases || cases.length === 0) return 'empty_cases';
+  let h = 0x811c9dc5;
+  for (const c of cases) {
+    const entList = (c.entities || []).map((e) => [
+      e.label || '',
+      e.pii_type || '',
+      e.start,
+      e.end,
+      e.text || '',
+    ]);
+    const payload = JSON.stringify([
+      c.case_id,
+      c.context || '',
+      c.query || '',
+      c.recipient || '',
+      c.purpose || '',
+      c.expected_decision || '',
+      c.risk_level || '',
+      entList,
+    ]);
+    for (let i = 0; i < payload.length; i++) {
+      h ^= payload.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+  }
+  return `fp_${cases.length}_${(h >>> 0).toString(16).padStart(8, '0')}`;
+}
+
 export function executeBenchmarkRun(
   cases: PrivacyCase[],
   selectedMethods: string[],
   seed: number,
-  detectorConfig = { enable_regex: true, enable_ner: true, enable_llm: false }
+  detectorConfig: { enable_regex: boolean; enable_ner: boolean; enable_llm: boolean } = {
+    enable_regex: true,
+    enable_ner: true,
+    enable_llm: false,
+  },
+  stratify: boolean = true
 ) {
   const startTime = new Date();
   const detector = new HybridDetector({
@@ -408,6 +462,26 @@ export function executeBenchmarkRun(
 
   const runId = `pg_exp_${startTime.toISOString().replace(/[-:T]/g, '').slice(0, 15)}_${Math.random().toString(36).substring(2, 8)}`;
 
+  let totalEntities = 0;
+  let invalidOffsets = 0;
+  for (const c of cases) {
+    totalEntities += (c.entities || []).length;
+    for (const ent of c.entities || []) {
+      const isValidOffset =
+        Number.isInteger(ent.start) &&
+        Number.isInteger(ent.end) &&
+        ent.start >= 0 &&
+        ent.start < ent.end &&
+        ent.text != null &&
+        ent.text.trim().length > 0 &&
+        c.context != null &&
+        ent.end <= c.context.length;
+      if (!isValidOffset || c.context.slice(ent.start, ent.end) !== ent.text) {
+        invalidOffsets++;
+      }
+    }
+  }
+
   return {
     run_metadata: {
       run_id: runId,
@@ -418,7 +492,7 @@ export function executeBenchmarkRun(
       requested_sample_size: cases.length,
       evaluated_sample_size: cases.length,
       random_seed: seed,
-      stratified: true,
+      stratified: stratify,
       stratified_distribution: {
         CRITICAL: cases.filter((c) => c.risk_level === 'CRITICAL').length,
         HIGH: cases.filter((c) => c.risk_level === 'HIGH').length,
@@ -427,6 +501,13 @@ export function executeBenchmarkRun(
         NONE: cases.filter((c) => c.risk_level === 'NONE').length,
       },
       dataset_fingerprint: 'csv_e28fb80c1095_json_f4229455a3e3',
+      sample_fingerprint: computeCaseFingerprint(cases),
+      sample_validation: {
+        checked_cases: cases.length,
+        checked_entities: totalEntities,
+        invalid_offsets_count: invalidOffsets,
+        valid: invalidOffsets === 0,
+      },
       methods_evaluated: selectedMethods,
       failed_executions_count: 0,
       detector_config: detectorConfig,
@@ -502,7 +583,7 @@ export function executeBenchmarkRun(
       detection_precision: 'True detected entities / Total detected entities. Measures false-alarm rate.',
       detection_recall: 'True detected entities / Total ground-truth entities. Measures coverage of sensitive entities.',
       detection_f1: 'Harmonic mean of detection precision and recall.',
-      leakage_rate: 'Percentage of ground-truth PII entities that remain detectable in the protected output.',
+      leakage_rate: 'Mean of per-case leakage rates, where each case rate is the fraction of its ground-truth PII entities that remain detectable in the protected output.',
       cases_with_leakage_pct: 'Percentage of evaluated cases where at least one sensitive entity leaked into output.',
       utility_score: 'Composite metric combining non-PII token preservation rate (60%) and token Jaccard similarity (40%).',
       context_accuracy: 'Percentage of privacy decisions (ALLOW/DENY) that align with contextual integrity norms.',

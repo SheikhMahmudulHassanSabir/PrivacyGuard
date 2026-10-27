@@ -23,7 +23,6 @@ export const InteractiveTestView: React.FC = () => {
   // Detector configuration
   const [useRegex, setUseRegex] = useState<boolean>(true);
   const [useNer, setUseNer] = useState<boolean>(true);
-  const [useLlm, setUseLlm] = useState<boolean>(false);
 
   // Form inputs
   const defaultText =
@@ -53,7 +52,7 @@ export const InteractiveTestView: React.FC = () => {
     const detector = new HybridDetector({
       enableRegex: useRegex,
       enableNer: useNer,
-      enableLlm: useLlm,
+      enableLlm: false,
     });
 
     const caseData: PrivacyCase = {
@@ -128,17 +127,19 @@ export const InteractiveTestView: React.FC = () => {
               </div>
             </label>
 
-            <label className="flex items-start gap-3 cursor-pointer text-xs">
+            <label className="flex items-start gap-3 cursor-not-allowed opacity-60 text-xs">
               <input
                 type="checkbox"
-                checked={useLlm}
-                onChange={(e) => setUseLlm(e.target.checked)}
-                className="accent-neutral-950 w-4 h-4 mt-0.5 shrink-0"
+                checked={false}
+                disabled
+                className="accent-neutral-950 w-4 h-4 mt-0.5 shrink-0 cursor-not-allowed"
               />
               <div>
-                <span className="font-semibold text-neutral-950 block">Enable LLM Detector</span>
+                <span className="font-semibold text-neutral-950 block">
+                  Enable LLM Detector <span className="font-mono text-[10px] text-neutral-500 font-normal">(Unavailable in client)</span>
+                </span>
                 <p className="text-neutral-500 text-[11px] mt-0.5 leading-relaxed">
-                  Zero-shot contextual reasoning layer.
+                  Requires backend LLM inference endpoint (inactive in client-only demo).
                 </p>
               </div>
             </label>

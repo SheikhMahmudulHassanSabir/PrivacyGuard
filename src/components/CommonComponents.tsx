@@ -55,7 +55,7 @@ export const DatasetBanner: React.FC<{ report: DatasetValidationReport }> = ({ r
           </span>
         </div>
         <div className="text-xs text-neutral-500 font-mono flex items-center gap-2">
-          <span>SHA-256 Fingerprint</span>
+          <span>Dataset Fingerprint</span>
           <span aria-hidden="true">·</span>
           <span className="text-neutral-900">{report.fingerprint || 'csv_e28fb80c1095_json_f4229455a3e3'}</span>
         </div>

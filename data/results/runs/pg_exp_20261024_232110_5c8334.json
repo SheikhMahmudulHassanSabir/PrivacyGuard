@@ -10276,7 +10276,7 @@
     "detection_precision": "True detected entities / Total detected entities. Measures false-alarm rate.",
     "detection_recall": "True detected entities / Total ground-truth entities. Measures coverage of sensitive entities.",
     "detection_f1": "Harmonic mean of detection precision and recall.",
-    "leakage_rate": "Percentage of ground-truth PII entities that remain detectable in the protected output.",
+    "leakage_rate": "Mean of per-case leakage rates, where each case rate is the fraction of its ground-truth PII entities that remain detectable in the protected output.",
     "cases_with_leakage_pct": "Percentage of evaluated cases where at least one sensitive entity leaked into output.",
     "utility_score": "Composite metric combining non-PII token preservation rate (60%) and token Jaccard similarity (40%).",
     "context_accuracy": "Percentage of privacy decisions (ALLOW/DENY) that align with contextual integrity norms.",

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Header, DatasetBanner, KpiCard } from '../components/CommonComponents';
 import { ExperimentRunData, PrivacyCase } from '../types/privacy';
-import { executeBenchmarkRun } from '../lib/evaluator';
+import { executeBenchmarkRun, deriveRiskLevel } from '../lib/evaluator';
 import {
   Play,
   History,
@@ -13,16 +13,80 @@ import {
 } from 'lucide-react';
 
 interface RunExperimentViewProps {
+  corpusData?: ExperimentRunData;
   currentData: ExperimentRunData;
   onUpdateActiveRun: (data: ExperimentRunData) => void;
   onNavigateToDashboard: () => void;
 }
 
+function createSeededRandom(seed: number) {
+  let s = Math.abs(seed) % 2147483647;
+  if (s <= 0) s = 1;
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
+function sampleCases(
+  records: any[],
+  numSamples: number,
+  seed: number,
+  stratified: boolean
+): any[] {
+  if (records.length <= numSamples) {
+    return [...records];
+  }
+  const rand = createSeededRandom(seed);
+
+  if (!stratified) {
+    const shuffled = [...records];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, numSamples);
+  }
+
+  const groups: Record<string, any[]> = {};
+  for (const r of records) {
+    const key = r.risk_level || deriveRiskLevel(r.ground_truth_entities || []);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  }
+
+  for (const key of Object.keys(groups)) {
+    const group = groups[key];
+    for (let i = group.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [group[i], group[j]] = [group[j], group[i]];
+    }
+  }
+
+  const selected: any[] = [];
+  const groupKeys = Object.keys(groups);
+  for (const key of groupKeys) {
+    const count = Math.max(1, Math.round((groups[key].length / records.length) * numSamples));
+    selected.push(...groups[key].slice(0, count));
+  }
+
+  if (selected.length > numSamples) {
+    return selected.slice(0, numSamples);
+  }
+  if (selected.length < numSamples) {
+    const remaining = records.filter((r) => !selected.includes(r));
+    return [...selected, ...remaining.slice(0, numSamples - selected.length)];
+  }
+  return selected;
+}
+
 export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
+  corpusData,
   currentData,
   onUpdateActiveRun,
   onNavigateToDashboard,
 }) => {
+  const sourceCorpus = corpusData?.per_record_results || currentData?.per_record_results || [];
   const [sampleSize, setSampleSize] = useState<number | 'full'>(50);
   const [randomSeed, setRandomSeed] = useState<number>(42);
   const [stratify, setStratify] = useState<boolean>(true);
@@ -62,44 +126,67 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
     setValidationError(null);
     setIsRunning(true);
     setProgress(0.15);
-    setStatusMsg('Sampling verified dataset records with seed ' + randomSeed + '...');
+    setStatusMsg(`Sampling cases with seed ${randomSeed}...`);
 
     setTimeout(() => {
-      const existingRecords = currentData.per_record_results || [];
-      const numSamples =
-        sampleSize === 'full'
-          ? existingRecords.length
-          : Math.min(Number(sampleSize), existingRecords.length || 50);
+      try {
+        if (!sourceCorpus || sourceCorpus.length === 0) {
+          throw new Error('No dataset records available in corpus.');
+        }
 
-      const sampledCases: PrivacyCase[] = existingRecords.slice(0, numSamples).map((r) => ({
-        case_id: r.case_id,
-        context: r.context,
-        query: r.query,
-        recipient: r.recipient,
-        purpose: r.purpose,
-        expected_decision: r.expected_decision,
-        entities: r.ground_truth_entities.map((e) => ({
-          entity_id: 'e_' + Math.random().toString(36).substring(2, 7),
-          text: e.text,
-          pii_type: e.type,
-          start: e.start,
-          end: e.end,
-          label: e.type,
-        })),
-      }));
+        const maxAvailable = sourceCorpus.length;
+        const targetCount = sampleSize === 'full' ? maxAvailable : Math.min(Number(sampleSize), maxAvailable);
 
-      setProgress(0.55);
-      setStatusMsg(`Executing ${selected.length} methods across ${sampledCases.length} cases...`);
+        const chosenRecords = sampleCases(sourceCorpus, targetCount, randomSeed, stratify);
+        if (!chosenRecords || chosenRecords.length === 0) {
+          throw new Error('Selected sample produced 0 evaluation cases.');
+        }
 
-      setTimeout(() => {
-        const newRun = executeBenchmarkRun(sampledCases, selected, randomSeed);
-        setProgress(1.0);
-        setStatusMsg('Benchmark experiment completed.');
+        const sampledCases: PrivacyCase[] = chosenRecords.map((r) => ({
+          case_id: r.case_id,
+          context: r.context,
+          query: r.query,
+          recipient: r.recipient,
+          purpose: r.purpose,
+          expected_decision: r.expected_decision,
+          risk_level: r.risk_level || deriveRiskLevel(r.ground_truth_entities || []),
+          entities: (r.ground_truth_entities || []).map((e: any) => ({
+            entity_id: 'e_' + Math.random().toString(36).substring(2, 7),
+            text: e.text,
+            pii_type: e.type,
+            start: e.start,
+            end: e.end,
+            label: e.type,
+          })),
+        }));
+
+        setProgress(0.55);
+        setStatusMsg(`Executing ${selected.length} methods across ${sampledCases.length} cases...`);
+
+        setTimeout(() => {
+          try {
+            const newRun = executeBenchmarkRun(
+              sampledCases,
+              selected,
+              randomSeed,
+              undefined,
+              stratify
+            );
+            setProgress(1.0);
+            setStatusMsg('Benchmark experiment completed.');
+            setCompletedSummary(newRun.run_metadata);
+            setSavedRuns((prev) => [newRun as any, ...prev]);
+            onUpdateActiveRun(newRun as any);
+          } catch (execErr: any) {
+            setValidationError(execErr?.message || 'Error executing benchmark evaluation.');
+          } finally {
+            setIsRunning(false);
+          }
+        }, 450);
+      } catch (err: any) {
+        setValidationError(err?.message || 'Error preparing evaluation cases.');
         setIsRunning(false);
-        setCompletedSummary(newRun.run_metadata);
-        setSavedRuns((prev) => [newRun as any, ...prev]);
-        onUpdateActiveRun(newRun as any);
-      }, 450);
+      }
     }, 350);
   };
 
@@ -152,16 +239,13 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
                     }
                     className="w-full text-xs p-2.5 bg-neutral-50 border border-neutral-300 focus:outline-none focus:border-neutral-950 focus:bg-white text-neutral-950"
                   >
-                    <option value={10}>10 Cases</option>
+                    <option value={10}>10 Cases (Fast Evaluation)</option>
                     <option value={25}>25 Cases</option>
-                    <option value={50}>50 Cases (Recommended Balance)</option>
-                    <option value={100}>100 Cases</option>
-                    <option value={250}>250 Cases</option>
-                    <option value={500}>500 Cases</option>
-                    <option value="full">Full Verified Set (4,434)</option>
+                    <option value={50}>50 Cases (Full Bundled Corpus)</option>
+                    <option value="full">Full Corpus (All {sourceCorpus.length} cases)</option>
                   </select>
                   <p className="text-[11px] text-neutral-500 mt-1.5 leading-relaxed">
-                    50 cases offers an optimal balance of statistical significance and sub-second execution.
+                    Evaluates against the browser-bundled verified benchmark corpus with instant sub-second execution.
                   </p>
                 </div>
 

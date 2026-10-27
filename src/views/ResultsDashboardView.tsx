@@ -44,10 +44,10 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
   const records = experimentData?.per_record_results || [];
 
   // Top KPI calculations
-  const totalCases = meta.evaluated_sample_size || 50;
-  const detF1 = detBench.overall?.f1 ? detBench.overall.f1.toFixed(3) : '0.654';
-  const detP = detBench.overall?.precision ? detBench.overall.precision.toFixed(2) : '0.79';
-  const detR = detBench.overall?.recall ? detBench.overall.recall.toFixed(2) : '0.56';
+  const totalCases = meta.evaluated_sample_size != null ? meta.evaluated_sample_size : 'N/A';
+  const detF1 = detBench.overall?.f1 != null ? detBench.overall.f1.toFixed(3) : 'N/A';
+  const detP = detBench.overall?.precision != null ? detBench.overall.precision.toFixed(2) : 'N/A';
+  const detR = detBench.overall?.recall != null ? detBench.overall.recall.toFixed(2) : 'N/A';
 
   const transMetrics = methodMetrics.filter(
     (m) => m.leakage_rate !== null && m.leakage_rate !== undefined
@@ -60,6 +60,7 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
   const ciMetrics = methodMetrics.filter(
     (m) => m.context_accuracy !== null && m.context_accuracy !== undefined
   );
+  const privacyLensMetrics = ciMetrics.find((m) => m.method_name === 'privacylens');
   const maxCi =
     ciMetrics.length > 0 ? Math.max(...ciMetrics.map((m) => m.context_accuracy || 0)) : 0;
 
@@ -335,22 +336,22 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <KpiCard
                   label="Overall Precision"
-                  value={detBench.overall?.precision?.toFixed(3) || '0.793'}
+                  value={detBench.overall?.precision != null ? detBench.overall.precision.toFixed(3) : 'N/A'}
                   sub="TP / (TP + FP)"
                 />
                 <KpiCard
                   label="Overall Recall"
-                  value={detBench.overall?.recall?.toFixed(3) || '0.556'}
+                  value={detBench.overall?.recall != null ? detBench.overall.recall.toFixed(3) : 'N/A'}
                   sub="TP / (TP + FN)"
                 />
                 <KpiCard
                   label="Overall F1-Score"
-                  value={detBench.overall?.f1?.toFixed(3) || '0.654'}
+                  value={detBench.overall?.f1 != null ? detBench.overall.f1.toFixed(3) : 'N/A'}
                   sub="Harmonic Mean"
                 />
                 <KpiCard
                   label="Total GT Entities"
-                  value={detBench.overall?.total_ground_truth_entities || 248}
+                  value={detBench.overall?.total_ground_truth_entities != null ? detBench.overall.total_ground_truth_entities : 'N/A'}
                   sub="Evaluated Entities"
                 />
               </div>
@@ -580,31 +581,31 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
                 </p>
               </div>
 
-              {ciMetrics.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <KpiCard
-                    label="PrivacyLens Decision Acc"
-                    value={`${((ciMetrics[0].context_accuracy || 0) * 100).toFixed(1)}%`}
-                    sub="Normative compliance"
-                  />
-                  <KpiCard
-                    label="Unsafe ALLOW Rate"
-                    value={`${((ciMetrics[0].unsafe_allow_rate || 0) * 100).toFixed(1)}%`}
-                    sub="Target: 0.0%"
-                    helpText="High risk cases wrongly allowed to untrusted recipients"
-                  />
-                  <KpiCard
-                    label="Unnecessary DENY Rate"
-                    value={`${((ciMetrics[0].unnecessary_deny_rate || 0) * 100).toFixed(1)}%`}
-                    sub="Legitimate flows blocked"
-                  />
-                </div>
-              )}
+              {privacyLensMetrics && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <KpiCard
+                          label="PrivacyLens Decision Acc"
+                          value={`${((privacyLensMetrics.context_accuracy || 0) * 100).toFixed(1)}%`}
+                          sub="Normative compliance"
+                        />
+                        <KpiCard
+                          label="Unsafe ALLOW Rate"
+                          value={`${((privacyLensMetrics.unsafe_allow_rate || 0) * 100).toFixed(1)}%`}
+                          sub="Target: 0.0%"
+                          helpText="High risk cases wrongly allowed to untrusted recipients"
+                        />
+                        <KpiCard
+                          label="Unnecessary DENY Rate"
+                          value={`${((privacyLensMetrics.unnecessary_deny_rate || 0) * 100).toFixed(1)}%`}
+                          sub="Legitimate flows blocked"
+                        />
+                      </div>
+                    )}
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {ciMetrics[0]?.decision_distribution && (
-                  <DecisionDonutChart distribution={ciMetrics[0].decision_distribution} />
-                )}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {privacyLensMetrics?.decision_distribution && (
+                        <DecisionDonutChart distribution={privacyLensMetrics.decision_distribution} />
+                      )}
 
                 <div className="bg-white border border-neutral-200 p-5 space-y-3 text-xs text-neutral-700">
                   <h4 className="font-semibold text-sm text-neutral-950 pb-3 border-b border-neutral-100">
@@ -837,7 +838,7 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
                                       {mData.latency_ms?.toFixed(2) || '0.00'} ms
                                     </strong>
                                   </div>
-                                  {mData.leakage_rate !== undefined && (
+                                  {caseMethodTab !== 'privacylens' && caseMethodTab !== 'confaide' && mData.leakage_rate !== undefined && (
                                     <div className="p-2.5 bg-neutral-50 border border-neutral-200">
                                       <span className="text-[10px] text-neutral-500 block font-sans">
                                         Leakage Rate
@@ -847,7 +848,7 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
                                       </strong>
                                     </div>
                                   )}
-                                  {mData.utility_score !== undefined && (
+                                  {caseMethodTab !== 'privacylens' && caseMethodTab !== 'confaide' && mData.utility_score !== undefined && (
                                     <div className="p-2.5 bg-neutral-50 border border-neutral-200">
                                       <span className="text-[10px] text-neutral-500 block font-sans">
                                         Utility Score
