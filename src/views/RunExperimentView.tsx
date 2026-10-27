@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 
 interface RunExperimentViewProps {
+  corpusData?: ExperimentRunData | any;
   currentData: ExperimentRunData;
   savedRuns: ExperimentRunData[];
   onSaveNewRun: (data: ExperimentRunData) => void;
@@ -26,36 +27,46 @@ interface RunExperimentViewProps {
   onNavigateToDashboard: () => void;
 }
 
-const CANONICAL_BASE_CASES: PrivacyCase[] = (
-  (initialRunData as any).per_record_results || []
-).map((r: any) => {
-  const entities = (r.ground_truth_entities || []).map((e: any, idx: number) => ({
-    entity_id: `gt_${r.case_id}_${idx}`,
-    text: e.text,
-    pii_type: e.type,
-    start: e.start,
-    end: e.end,
-    label: e.type,
-  }));
-  return {
-    case_id: r.case_id,
-    context: r.context,
-    query: r.query,
-    recipient: r.recipient,
-    purpose: r.purpose,
-    expected_decision: r.expected_decision,
-    risk_level: r.risk_level || classifyCaseRiskTier(entities),
-    entities,
-  };
-});
+const parseCasesFromData = (data: any): PrivacyCase[] => {
+  return ((data?.per_record_results) || []).map((r: any) => {
+    const entities = (r.ground_truth_entities || []).map((e: any, idx: number) => ({
+      entity_id: `gt_${r.case_id}_${idx}`,
+      text: e.text,
+      pii_type: e.type,
+      start: e.start,
+      end: e.end,
+      label: e.type,
+    }));
+    return {
+      case_id: r.case_id,
+      context: r.context,
+      query: r.query,
+      recipient: r.recipient,
+      purpose: r.purpose,
+      expected_decision: r.expected_decision,
+      risk_level: r.risk_level || classifyCaseRiskTier(entities),
+      entities,
+    };
+  });
+};
+
+const CANONICAL_BASE_CASES: PrivacyCase[] = parseCasesFromData(initialRunData);
 
 export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
+  corpusData,
   currentData,
   savedRuns,
   onSaveNewRun,
   onUpdateActiveRun,
   onNavigateToDashboard,
 }) => {
+  const availableCases = React.useMemo(() => {
+    if (corpusData && Array.isArray((corpusData as any).per_record_results) && (corpusData as any).per_record_results.length > 0) {
+      return parseCasesFromData(corpusData);
+    }
+    return CANONICAL_BASE_CASES;
+  }, [corpusData]);
+
   const [sampleSize, setSampleSize] = useState<number | 'full'>(50);
   const [randomSeed, setRandomSeed] = useState<number>(42);
   const [stratify, setStratify] = useState<boolean>(true);
@@ -123,14 +134,14 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
     setIsRunning(true);
     setProgress(0.2);
     setStatusMsg(
-      `Sampling ${sampleSize === 'full' ? '4,434' : sampleSize} verified records (Seed: ${safeSeed}, Stratified: ${stratify ? 'Yes' : 'No'})...`
+      `Sampling ${sampleSize === 'full' ? availableCases.length.toLocaleString() : sampleSize} verified records (Seed: ${safeSeed}, Stratified: ${stratify ? 'Yes' : 'No'})...`
     );
 
     clearTimers();
 
     const t1 = window.setTimeout(() => {
       const sampledCases = sampleBenchmarkCases(
-        CANONICAL_BASE_CASES,
+        availableCases,
         sampleSize,
         safeSeed,
         stratify
@@ -225,7 +236,7 @@ export const RunExperimentView: React.FC<RunExperimentViewProps> = ({
                     <option value={100}>100 Cases</option>
                     <option value={250}>250 Cases</option>
                     <option value={500}>500 Cases</option>
-                    <option value="full">Full Verified Set (4,434)</option>
+                    <option value="full">Full Verified Set ({availableCases.length.toLocaleString()})</option>
                   </select>
                   <p className="text-[11px] text-neutral-500 mt-1.5 leading-relaxed">
                     Exact sample size is enforced without record duplication.
