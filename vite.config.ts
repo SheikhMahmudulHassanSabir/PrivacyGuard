@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/PrivacyGuard/' : '/',
+  base: command === 'build' ? './' : '/',
   plugins: [react(), tailwindcss()],
   server: {
     host: '0.0.0.0',
