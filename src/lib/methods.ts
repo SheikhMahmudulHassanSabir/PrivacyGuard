@@ -167,6 +167,8 @@ export class PIIvotMethod {
     masked.sort((a, b) => a.start - b.start);
     const latency = Math.max(0.01, performance.now() - start);
 
+    const decision = masked.length > 0 ? 'DENY' : 'ALLOW';
+
     return {
       case_id: caseData.case_id,
       method_name: 'piivot',
@@ -174,6 +176,8 @@ export class PIIvotMethod {
       protected_text: protectedText,
       detected_entities: entities,
       masked_entities: masked,
+      kept_entities: [],
+      privacy_decision: decision,
       latency_ms: Math.round(latency * 100) / 100,
       reasoning: `PIIvot context-preserving pseudonymization applied to ${masked.length} entities.`,
       metadata: {
@@ -238,6 +242,8 @@ export class PRvLMethod {
       logicProof = `ALLOW_SYMBOLIC_SUBSTITUTION: IndependentAttributes(${entitiesSorted.length}) -> CanonicalDeIdentificationApplied`;
     }
 
+    const decision =
+      (hasName && (hasContact || hasAddress)) || entitiesSorted.length > 0 ? 'DENY' : 'ALLOW';
     const latency = Math.max(0.01, performance.now() - start);
 
     return {
@@ -247,6 +253,8 @@ export class PRvLMethod {
       protected_text: protectedText,
       detected_entities: entities,
       masked_entities: entitiesSorted,
+      kept_entities: [],
+      privacy_decision: decision,
       latency_ms: Math.round(latency * 100) / 100,
       reasoning: `PRvL symbolic transformation applied. Logic Proof: ${logicProof}`,
       metadata: {
@@ -376,6 +384,8 @@ export class PIIBenchMethod {
         protectedText.slice(0, ent.start) + replacement + protectedText.slice(ent.end);
     }
 
+    const decision =
+      maskedEntities.length > 0 && keptEntities.length === 0 ? 'DENY' : 'ALLOW';
     const latency = Math.max(0.01, performance.now() - start);
     const reasoning = `PII-Bench task-aware filtering: Retained ${keptEntities.length} task-relevant entities (${keptEntities.map((e) => e.pii_type).join(', ') || 'none'}); Redacted ${maskedEntities.length} non-relevant entities to minimize leakage.`;
 
@@ -387,6 +397,7 @@ export class PIIBenchMethod {
       detected_entities: entities,
       masked_entities: maskedEntities,
       kept_entities: keptEntities,
+      privacy_decision: decision,
       latency_ms: Math.round(latency * 100) / 100,
       reasoning,
       metadata: {

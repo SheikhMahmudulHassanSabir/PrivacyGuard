@@ -18,8 +18,8 @@ import {
   X,
 } from 'lucide-react';
 
-const STORAGE_RUNS_KEY = 'privacyguard_saved_runs_v1';
-const STORAGE_ACTIVE_ID_KEY = 'privacyguard_active_run_id_v1';
+const STORAGE_RUNS_KEY = 'privacyguard_saved_runs_v2';
+const STORAGE_ACTIVE_ID_KEY = 'privacyguard_active_run_id_v2';
 
 export function App() {
   const [activeView, setActiveView] = useState<string>('overview');

@@ -50,19 +50,12 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
   const detP = detBench.overall?.precision ? detBench.overall.precision.toFixed(2) : '0.79';
   const detR = detBench.overall?.recall ? detBench.overall.recall.toFixed(2) : '0.56';
 
-  const transMetrics = methodMetrics.filter(
-    (m) => m.leakage_rate !== null && m.leakage_rate !== undefined
-  );
   const minLeak =
-    transMetrics.length > 0 ? Math.min(...transMetrics.map((m) => m.leakage_rate || 0)) : 0;
+    methodMetrics.length > 0 ? Math.min(...methodMetrics.map((m) => m.leakage_rate ?? 0)) : 0;
   const maxUtil =
-    transMetrics.length > 0 ? Math.max(...transMetrics.map((m) => m.utility_score || 0)) : 0;
-
-  const ciMetrics = methodMetrics.filter(
-    (m) => m.context_accuracy !== null && m.context_accuracy !== undefined
-  );
+    methodMetrics.length > 0 ? Math.max(...methodMetrics.map((m) => m.utility_score ?? 0)) : 0;
   const maxCi =
-    ciMetrics.length > 0 ? Math.max(...ciMetrics.map((m) => m.context_accuracy || 0)) : 0;
+    methodMetrics.length > 0 ? Math.max(...methodMetrics.map((m) => m.context_accuracy ?? 0)) : 0;
 
   const meanLat =
     methodMetrics.length > 0
@@ -80,24 +73,20 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
       'Category',
       'Detector F1',
       'Leakage Rate',
-      'Cases With Leak %',
+      'Cases w/ Leakage',
       'Utility Score',
-      'Context Decision Acc',
+      'Context Accuracy',
       'Median Latency (ms)',
       'Success Rate',
     ];
     const rows = methodMetrics.map((m) => [
       m.method_name.toUpperCase(),
       m.category,
-      (m.detector_f1 || detBench.overall?.f1 || 0).toFixed(3),
-      m.leakage_rate !== null && m.leakage_rate !== undefined ? m.leakage_rate.toFixed(3) : 'N/A',
-      m.cases_with_leakage_pct !== null && m.cases_with_leakage_pct !== undefined
-        ? `${m.cases_with_leakage_pct}%`
-        : 'N/A',
-      m.utility_score !== null && m.utility_score !== undefined ? m.utility_score.toFixed(3) : 'N/A',
-      m.context_accuracy !== null && m.context_accuracy !== undefined
-        ? m.context_accuracy.toFixed(3)
-        : 'N/A',
+      (m.detector_f1 ?? detBench.overall?.f1 ?? 0).toFixed(3),
+      `${((m.leakage_rate ?? 0) * 100).toFixed(1)}%`,
+      `${(m.cases_with_leakage_pct ?? 0).toFixed(1)}%`,
+      (m.utility_score ?? 0).toFixed(3),
+      `${((m.context_accuracy ?? 0) * 100).toFixed(1)}%`,
       m.median_latency_ms.toFixed(2),
       `${((1.0 - (m.failure_rate || 0)) * 100).toFixed(1)}%`,
     ]);
@@ -211,13 +200,10 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
             <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-bold text-neutral-950 mb-1">
-                  Fair Multi-Method Comparison Matrix
+                  Standardized Multi-Method Comparison Matrix
                 </h3>
                 <p className="text-xs text-neutral-600 leading-relaxed">
-                  Presents empirical metrics adhering strictly to the{' '}
-                  <strong className="text-neutral-950">Metrics Applicability Matrix</strong>. Leakage
-                  and Utility apply to Text Transformation methods, while Context Accuracy applies to
-                  Normative Auditing methods.
+                  All five privacy methods are evaluated on the exact same ground-truth dataset and entity annotations across all standardized metrics: <strong className="text-neutral-950">Detector F1</strong>, <strong className="text-neutral-950">Leakage Rate</strong>, <strong className="text-neutral-950">Cases w/ Leakage</strong>, <strong className="text-neutral-950">Utility Score</strong>, <strong className="text-neutral-950">Context Accuracy</strong>, <strong className="text-neutral-950">Median Latency</strong>, and <strong className="text-neutral-950">Success Rate</strong>.
                 </p>
               </div>
 
@@ -229,54 +215,64 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
                       <th className="py-3 px-4">Category</th>
                       <th className="py-3 px-4 text-right">Detector F1</th>
                       <th className="py-3 px-4 text-right">Leakage Rate</th>
-                      <th className="py-3 px-4 text-right">Cases w/ Leak</th>
+                      <th className="py-3 px-4 text-right">Cases w/ Leakage</th>
                       <th className="py-3 px-4 text-right">Utility Score</th>
-                      <th className="py-3 px-4 text-right">Context Acc</th>
+                      <th className="py-3 px-4 text-right">Context Accuracy</th>
                       <th className="py-3 px-4 text-right">Median Latency</th>
                       <th className="py-3 px-4 text-right">Success Rate</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200 font-mono tabular-nums">
-                    {methodMetrics.map((m) => (
-                      <tr key={m.method_name} className="hover:bg-neutral-50 transition-colors">
-                        <td className="py-3 px-4 font-sans whitespace-nowrap">
-                          <MethodBadge method={m.method_name} />
-                        </td>
-                        <td className="py-3 px-4 text-neutral-600 font-sans text-[11px]">
-                          {m.category}
-                        </td>
-                        <td className="py-3 px-4 text-neutral-800 text-right">
-                          {(m.detector_f1 || detBench.overall?.f1 || 0).toFixed(3)}
-                        </td>
-                        <td className="py-3 px-4 text-neutral-800 text-right">
-                          {m.leakage_rate !== null && m.leakage_rate !== undefined
-                            ? m.leakage_rate.toFixed(3)
-                            : 'N/A (Decision)'}
-                        </td>
-                        <td className="py-3 px-4 text-neutral-800 text-right">
-                          {m.cases_with_leakage_pct !== null &&
-                          m.cases_with_leakage_pct !== undefined
-                            ? `${m.cases_with_leakage_pct.toFixed(1)}%`
-                            : 'N/A'}
-                        </td>
-                        <td className="py-3 px-4 text-neutral-800 text-right">
-                          {m.utility_score !== null && m.utility_score !== undefined
-                            ? m.utility_score.toFixed(3)
-                            : 'N/A (Decision)'}
-                        </td>
-                        <td className="py-3 px-4 text-neutral-800 text-right">
-                          {m.context_accuracy !== null && m.context_accuracy !== undefined
-                            ? m.context_accuracy.toFixed(3)
-                            : 'N/A (Transform)'}
-                        </td>
-                        <td className="py-3 px-4 text-neutral-950 font-semibold text-right">
-                          {m.median_latency_ms.toFixed(2)} ms
-                        </td>
-                        <td className="py-3 px-4 text-neutral-950 font-bold text-right">
-                          {((1.0 - (m.failure_rate || 0)) * 100).toFixed(1)}%
-                        </td>
-                      </tr>
-                    ))}
+                    {methodMetrics.map((m) => {
+                      const leakRatio = m.leakage_rate ?? 0;
+                      const casesPct = m.cases_with_leakage_pct ?? 0;
+                      const casesCount =
+                        m.cases_with_leakage_count ??
+                        Math.round((casesPct / 100) * (m.total_cases || 50));
+                      const utilVal = m.utility_score ?? 0;
+                      const ctxVal = m.context_accuracy ?? 0;
+
+                      return (
+                        <tr key={m.method_name} className="hover:bg-neutral-50 transition-colors">
+                          <td className="py-3 px-4 font-sans whitespace-nowrap">
+                            <MethodBadge method={m.method_name} />
+                          </td>
+                          <td className="py-3 px-4 text-neutral-600 font-sans text-[11px]">
+                            {m.category}
+                          </td>
+                          <td className="py-3 px-4 text-neutral-800 text-right">
+                            {(m.detector_f1 ?? detBench.overall?.f1 ?? 0).toFixed(3)}
+                          </td>
+                          <td
+                            className="py-3 px-4 text-neutral-950 font-semibold text-right"
+                            title={`${m.total_leaked_entities ?? 0} / ${m.total_ground_truth_entities ?? 186} ground-truth entities exposed (Ratio: ${leakRatio.toFixed(3)})`}
+                          >
+                            {(leakRatio * 100).toFixed(1)}%
+                          </td>
+                          <td
+                            className="py-3 px-4 text-neutral-800 text-right"
+                            title={`${casesCount} / ${m.total_cases} evaluated cases had >=1 exposed ground-truth entity`}
+                          >
+                            {casesPct.toFixed(1)}% ({casesCount}/{m.total_cases})
+                          </td>
+                          <td className="py-3 px-4 text-neutral-950 font-semibold text-right">
+                            {utilVal.toFixed(3)}
+                          </td>
+                          <td
+                            className="py-3 px-4 text-neutral-950 font-semibold text-right"
+                            title={`Context Accuracy Ratio: ${ctxVal.toFixed(3)}`}
+                          >
+                            {(ctxVal * 100).toFixed(1)}%
+                          </td>
+                          <td className="py-3 px-4 text-neutral-950 font-semibold text-right">
+                            {m.median_latency_ms.toFixed(2)} ms
+                          </td>
+                          <td className="py-3 px-4 text-neutral-950 font-bold text-right">
+                            {((1.0 - (m.failure_rate || 0)) * 100).toFixed(1)}%
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -285,31 +281,26 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
                 <div className="p-5 bg-neutral-50 border border-neutral-200 text-xs space-y-2">
                   <div className="flex items-center gap-2 font-bold text-neutral-950">
                     <BookOpen className="w-4 h-4 text-neutral-950 stroke-[1.75]" />
-                    <h4>PIIvot & PRvL · Redaction & Pseudonymization</h4>
+                    <h4>PIIvot, PRvL & PII-Bench · Transformation & Selective Masking</h4>
                   </div>
                   <p className="text-neutral-600 leading-relaxed">
-                    Achieve high utility scores (&gt;0.98) by maintaining sentence structure. Residual
-                    leakage corresponds directly to detector false negatives (un-detected entities).
+                    <strong className="text-neutral-950">PIIvot</strong> and <strong className="text-neutral-950">PRvL</strong> replace all detected PII across every case, achieving minimal leakage (limited only by detector recall) while differing in surrogate naturalness vs. symbolic formalization.
                   </p>
                   <p className="text-neutral-600 leading-relaxed">
-                    <strong className="text-neutral-950">PII-Bench:</strong> Retains query-relevant
-                    PII deliberately to fulfill downstream inquiries.
+                    <strong className="text-neutral-950">PII-Bench</strong> selectively retains query-relevant attributes, improving downstream task compliance on authorized <code className="font-mono">ALLOW</code> flows while exhibiting higher exposure when queries target sensitive attributes.
                   </p>
                 </div>
 
                 <div className="p-5 bg-neutral-50 border border-neutral-200 text-xs space-y-2">
                   <div className="flex items-center gap-2 font-bold text-neutral-950">
                     <Shield className="w-4 h-4 text-neutral-950 stroke-[1.75]" />
-                    <h4>PrivacyLens & ConfAIde · Contextual Integrity Auditing</h4>
+                    <h4>PrivacyLens & ConfAIde · Contextual Decision & Enforcement</h4>
                   </div>
                   <p className="text-neutral-600 leading-relaxed">
-                    Audit whether an information transmission should be{' '}
-                    <strong className="text-neutral-950">ALLOWED</strong> or{' '}
-                    <strong className="text-neutral-950">DENIED</strong> based on social norms,
-                    recipient trust, and purpose legitimacy.
+                    Audit whether an information transmission should be <strong className="text-neutral-950">ALLOWED</strong> or <strong className="text-neutral-950">DENIED</strong> based on recipient trust, domain sensitivity, and transmission purpose.
                   </p>
-                  <p className="text-neutral-950 font-medium">
-                    Fair Evaluation Guarantee: Decision engines are evaluated strictly on normative decision accuracy rather than unconditional text redaction.
+                  <p className="text-neutral-600 leading-relaxed">
+                    On <code className="font-mono">DENY</code> decisions, detected PII spans are redacted in the protected output; on <code className="font-mono">ALLOW</code> decisions, context is preserved unchanged—enabling unified evaluation of Leakage Rate, Utility Score, and Context Accuracy.
                   </p>
                 </div>
               </div>
@@ -413,11 +404,10 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
             <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-bold text-neutral-950 mb-1">
-                  Residual Privacy Leakage Analysis
+                  Residual Privacy Leakage Analysis (All 5 Methods)
                 </h3>
                 <p className="text-xs text-neutral-600">
-                  Measures whether ground-truth PII entities remain exposed in the protected outputs of
-                  transformation methods using word-boundary awareness.
+                  Measures the percentage of ground-truth PII entities that remain identifiable in each method's final protected output using word-boundary matching.
                 </p>
               </div>
 
@@ -425,12 +415,13 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
                 <LeakageBarChart
                   methods={methodMetrics}
                   metricKey="leakage_rate"
-                  title="Residual Leakage Rate (Lower is Better · Target: 0.000)"
+                  title="Entity-Level Leakage Rate (Lower is Better · Target: 0.0%)"
+                  scaleToPercent={true}
                 />
                 <LeakageBarChart
                   methods={methodMetrics}
                   metricKey="cases_with_leakage_pct"
-                  title="Percentage of Cases with >=1 Leaked Entity"
+                  title="Percentage of Cases with >=1 Exposed PII Entity"
                   isPercent={true}
                 />
               </div>
@@ -443,13 +434,13 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
                   </h4>
                 </div>
                 <p className="text-xs text-neutral-600">
-                  Records where entities remained in protected text due to detector misses or task preservation:
+                  Records where ground-truth entities remained in protected output due to detector false negatives, query-selective retention, or ALLOW decisions:
                 </p>
 
                 {(() => {
                   const leakedRecords: any[] = [];
                   for (const r of records) {
-                    for (const mName of ['piivot', 'prvl', 'pii_bench']) {
+                    for (const mName of ['piivot', 'prvl', 'pii_bench', 'privacylens', 'confaide']) {
                       const mRes = r.methods?.[mName];
                       if (mRes?.leaked_entities) {
                         for (const l of mRes.leaked_entities) {
@@ -459,9 +450,13 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
                             text: l.text,
                             type: l.type,
                             reason:
-                              mName !== 'pii_bench'
-                                ? 'Detector False Negative'
-                                : 'Query Relevance or Detector Miss',
+                              mName === 'pii_bench'
+                                ? 'Query Relevance or Detector Miss'
+                                : mName === 'privacylens' || mName === 'confaide'
+                                ? mRes.privacy_decision === 'ALLOW'
+                                  ? 'Authorized ALLOW Flow'
+                                  : 'Detector False Negative on DENY'
+                                : 'Detector False Negative',
                           });
                         }
                       }
@@ -568,41 +563,59 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
             <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-bold text-neutral-950 mb-1">
-                  Contextual Integrity & Risk Evaluation
+                  Contextual Integrity & Compliance Evaluation (All 5 Methods)
                 </h3>
                 <p className="text-xs text-neutral-600">
-                  Evaluates <strong className="text-neutral-950">PrivacyLens</strong> (normative audit)
-                  and <strong className="text-neutral-950">ConfAIde</strong> (multi-factor risk scoring)
-                  against social contextual norms and ground-truth decisions.
+                  Evaluates all five privacy methods against ground-truth contextual privacy norms (<code className="font-mono">ALLOW</code> vs. <code className="font-mono">DENY</code>), measuring explicit decision accuracy for <strong className="text-neutral-950">PrivacyLens</strong> and <strong className="text-neutral-950">ConfAIde</strong> alongside derived contextual protection compliance for <strong className="text-neutral-950">PIIvot</strong>, <strong className="text-neutral-950">PRvL</strong>, and <strong className="text-neutral-950">PII-Bench</strong>.
                 </p>
               </div>
 
-              {ciMetrics.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <LeakageBarChart
+                  methods={methodMetrics}
+                  metricKey="context_accuracy"
+                  title="Context Accuracy Across All 5 Methods (Higher is Better · Target: 100.0%)"
+                  scaleToPercent={true}
+                />
+
+                {methodMetrics.find((m) => m.method_name === 'privacylens')?.decision_distribution && (
+                  <DecisionDonutChart
+                    distribution={
+                      methodMetrics.find((m) => m.method_name === 'privacylens')!.decision_distribution!
+                    }
+                  />
+                )}
+              </div>
+
+              {methodMetrics.length > 0 && (
                 <div className="space-y-6">
-                  {ciMetrics.map((ciMethod) => (
+                  {methodMetrics.map((ciMethod) => (
                     <div key={ciMethod.method_name} className="space-y-4">
                       <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
-                        <MethodBadge method={ciMethod.method_name} />
+                        <div className="flex items-center gap-2">
+                          <MethodBadge method={ciMethod.method_name} />
+                          <span className="text-xs text-neutral-500">· {ciMethod.category}</span>
+                        </div>
                         <span className="text-xs font-mono text-neutral-500">
                           Evaluated on {ciMethod.total_cases} cases
                         </span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <KpiCard
-                          label={`${ciMethod.method_name.toUpperCase()} Decision Acc`}
-                          value={`${((ciMethod.context_accuracy || 0) * 100).toFixed(1)}%`}
-                          sub="Normative compliance"
+                          label={`${ciMethod.method_name.toUpperCase()} Context Acc`}
+                          value={`${((ciMethod.context_accuracy ?? 0) * 100).toFixed(1)}%`}
+                          sub={`Ratio: ${(ciMethod.context_accuracy ?? 0).toFixed(3)}`}
                         />
                         <KpiCard
                           label="Unsafe ALLOW Rate"
-                          value={`${((ciMethod.unsafe_allow_rate || 0) * 100).toFixed(1)}%`}
+                          value={`${((ciMethod.unsafe_allow_rate ?? 0) * 100).toFixed(1)}%`}
                           sub="Target: 0.0%"
-                          helpText="High risk cases wrongly allowed to untrusted recipients"
+                          helpText="DENY cases where sensitive PII remained exposed"
                         />
                         <KpiCard
                           label="Unnecessary DENY Rate"
-                          value={`${((ciMethod.unnecessary_deny_rate || 0) * 100).toFixed(1)}%`}
-                          sub="Legitimate flows blocked"
+                          value={`${((ciMethod.unnecessary_deny_rate ?? 0) * 100).toFixed(1)}%`}
+                          sub="Legitimate flows over-restricted"
                         />
                       </div>
                     </div>
@@ -610,39 +623,33 @@ export const ResultsDashboardView: React.FC<ResultsDashboardViewProps> = ({ expe
                 </div>
               )}
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {ciMetrics[0]?.decision_distribution && (
-                  <DecisionDonutChart distribution={ciMetrics[0].decision_distribution} />
-                )}
-
-                <div className="bg-white border border-neutral-200 p-5 space-y-3 text-xs text-neutral-700">
-                  <h4 className="font-semibold text-sm text-neutral-950 pb-3 border-b border-neutral-100">
-                    ConfAIde Multi-Factor Risk Scoring Model
-                  </h4>
-                  <p className="text-neutral-600">
-                    ConfAIde quantifies disclosure risk across four explicit contextual parameters:
-                  </p>
-                  <div className="space-y-2 text-neutral-600 pt-1">
-                    <div>
-                      <strong className="text-neutral-950">01. Domain Sensitivity (Sd):</strong>{' '}
-                      Healthcare (0.95), Finance (0.90), Education (0.60), Tech (0.35).
-                    </div>
-                    <div>
-                      <strong className="text-neutral-950">02. Entity Exposure (Se):</strong>{' '}
-                      Composite identity disclosure (0.90), direct contact (0.70).
-                    </div>
-                    <div>
-                      <strong className="text-neutral-950">03. Recipient Trust (Tr):</strong>{' '}
-                      Doctor/Attorney (0.20), Stranger/Advertiser (0.90).
-                    </div>
-                    <div>
-                      <strong className="text-neutral-950">04. Purpose Necessity (Pn):</strong>{' '}
-                      Treatment/Emergency (0.20), Advertising/Commercial (0.90).
-                    </div>
+              <div className="bg-white border border-neutral-200 p-5 space-y-3 text-xs text-neutral-700">
+                <h4 className="font-semibold text-sm text-neutral-950 pb-3 border-b border-neutral-100">
+                  ConfAIde Multi-Factor Risk Scoring Model
+                </h4>
+                <p className="text-neutral-600">
+                  ConfAIde quantifies disclosure risk across four explicit contextual parameters:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-neutral-600 pt-1">
+                  <div>
+                    <strong className="text-neutral-950">01. Domain Sensitivity (Sd):</strong>{' '}
+                    Healthcare (0.95), Finance (0.90), Education (0.60), Tech (0.35).
                   </div>
-                  <div className="p-3 bg-neutral-50 border border-neutral-900 font-mono font-bold text-neutral-950 mt-3">
-                    Risk = 0.40 · Se + 0.30 · Sd + 0.20 · Tr + 0.10 · Pn
+                  <div>
+                    <strong className="text-neutral-950">02. Entity Exposure (Se):</strong>{' '}
+                    Composite identity disclosure (0.90), direct contact (0.70).
                   </div>
+                  <div>
+                    <strong className="text-neutral-950">03. Recipient Trust (Tr):</strong>{' '}
+                    Doctor/Attorney (0.20), Stranger/Advertiser (0.90).
+                  </div>
+                  <div>
+                    <strong className="text-neutral-950">04. Purpose Necessity (Pn):</strong>{' '}
+                    Treatment/Emergency (0.20), Advertising/Commercial (0.90).
+                  </div>
+                </div>
+                <div className="p-3 bg-neutral-50 border border-neutral-900 font-mono font-bold text-neutral-950 mt-3">
+                  Risk = 0.40 · Se + 0.30 · Sd + 0.20 · Tr + 0.10 · Pn
                 </div>
               </div>
             </div>

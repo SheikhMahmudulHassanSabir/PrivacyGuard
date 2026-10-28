@@ -446,21 +446,13 @@ export const CompareMethodsView: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-neutral-200 font-mono tabular-nums">
                   {comparisonResults.map((r) => {
-                    const isAudit =
-                      r.method_name === 'privacylens' || r.method_name === 'confaide';
                     return (
                       <tr key={r.method_name} className="hover:bg-neutral-50 transition-colors">
                         <td className="py-3 px-4 font-sans whitespace-nowrap">
                           <MethodBadge method={r.method_name} />
                         </td>
                         <td className="py-3 px-4">
-                          {r.privacy_decision ? (
-                            <DecisionBadge decision={r.privacy_decision} />
-                          ) : (
-                            <span className="text-xs font-mono text-neutral-500">
-                              TRANSFORM
-                            </span>
-                          )}
+                          <DecisionBadge decision={r.privacy_decision || 'DENY'} />
                         </td>
                         <td className="py-3 px-4 text-neutral-800 text-right">
                           {r.detected_entities.length}
@@ -472,9 +464,7 @@ export const CompareMethodsView: React.FC = () => {
                           {r.kept_entities?.length || 0}
                         </td>
                         <td className="py-3 px-4 text-neutral-800 text-right">
-                          {isAudit && r.privacy_decision === 'ALLOW'
-                            ? 'Authorized Flow'
-                            : `${(r.leakageRate * 100).toFixed(0)}% (${r.leakedCount})`}
+                          {(r.leakageRate * 100).toFixed(1)}% ({r.leakedCount})
                         </td>
                         <td className="py-3 px-4 text-neutral-950 font-semibold text-right">
                           {r.utilityScore.toFixed(3)}

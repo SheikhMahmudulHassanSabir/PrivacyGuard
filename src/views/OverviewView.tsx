@@ -234,15 +234,104 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ experimentData, onNa
             <div className="mt-5 p-4 bg-neutral-50 border border-neutral-900 text-xs text-neutral-800 space-y-1.5">
               <div className="font-bold flex items-center gap-2 text-neutral-950">
                 <ShieldCheck className="w-4 h-4 text-neutral-950 stroke-[1.75]" />
-                <span>Scientific Integrity Note</span>
+                <span>Unified Evaluation Pipeline</span>
               </div>
               <p className="leading-relaxed text-neutral-600">
-                PII detection accuracy is a property of the detector layer. Text transformation methods are evaluated on <strong className="text-neutral-950">Leakage Rate</strong> and <strong className="text-neutral-950">Utility Preservation</strong>, while Contextual Integrity methods are evaluated on <strong className="text-neutral-950">Normative Decision Accuracy</strong>.
+                All five methods are evaluated on the exact same ground-truth dataset across six standardized metrics: <strong className="text-neutral-950">Detector F1</strong>, <strong className="text-neutral-950">Leakage Rate</strong>, <strong className="text-neutral-950">Cases w/ Leakage</strong>, <strong className="text-neutral-950">Utility Score</strong>, <strong className="text-neutral-950">Context Accuracy</strong>, and <strong className="text-neutral-950">Median Latency</strong>.
               </p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* 3.5 Standardized Cross-Method Benchmark Summary */}
+      {methods.length > 0 && (
+        <div className="border border-neutral-200 bg-white">
+          <div className="p-5 border-b border-neutral-200 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-bold text-neutral-950">
+                Standardized Cross-Method Evaluation Summary
+              </h2>
+              <p className="text-xs text-neutral-600 mt-0.5">
+                Empirical comparison across all five privacy paradigms on the shared {meta?.evaluated_sample_size || 50}-case ground-truth sample.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('dashboard')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-neutral-950 border border-neutral-950 bg-white hover:bg-neutral-950 hover:text-white transition-colors cursor-pointer"
+            >
+              <span>Full Dashboard</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-neutral-50 text-neutral-600 font-semibold border-b border-neutral-200">
+                <tr>
+                  <th className="py-3 px-4">Method</th>
+                  <th className="py-3 px-4">Category</th>
+                  <th className="py-3 px-4 text-right">Detector F1</th>
+                  <th className="py-3 px-4 text-right">Leakage Rate</th>
+                  <th className="py-3 px-4 text-right">Cases w/ Leakage</th>
+                  <th className="py-3 px-4 text-right">Utility Score</th>
+                  <th className="py-3 px-4 text-right">Context Accuracy</th>
+                  <th className="py-3 px-4 text-right">Median Latency</th>
+                  <th className="py-3 px-4 text-right">Success Rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-200 font-mono tabular-nums">
+                {methods.map((m) => {
+                  const leakPct = ((m.leakage_rate ?? 0) * 100).toFixed(1);
+                  const casesPct = (m.cases_with_leakage_pct ?? 0).toFixed(1);
+                  const casesCount =
+                    m.cases_with_leakage_count ??
+                    Math.round(((m.cases_with_leakage_pct ?? 0) / 100) * (m.total_cases || 50));
+                  const utilStr = (m.utility_score ?? 0).toFixed(3);
+                  const ctxPct = ((m.context_accuracy ?? 0) * 100).toFixed(1);
+                  return (
+                    <tr key={m.method_name} className="hover:bg-neutral-50 transition-colors">
+                      <td className="py-3 px-4 font-sans whitespace-nowrap">
+                        <MethodBadge method={m.method_name} />
+                      </td>
+                      <td className="py-3 px-4 text-neutral-600 font-sans text-[11px]">
+                        {m.category}
+                      </td>
+                      <td className="py-3 px-4 text-neutral-800 text-right">
+                        {(m.detector_f1 ?? detBench?.overall?.f1 ?? 0).toFixed(3)}
+                      </td>
+                      <td
+                        className="py-3 px-4 text-neutral-950 font-semibold text-right"
+                        title={`${m.total_leaked_entities ?? 0} / ${m.total_ground_truth_entities ?? 186} ground-truth entities exposed`}
+                      >
+                        {leakPct}%
+                      </td>
+                      <td
+                        className="py-3 px-4 text-neutral-800 text-right"
+                        title={`${casesCount} / ${m.total_cases} cases with >=1 exposed entity`}
+                      >
+                        {casesPct}% ({casesCount}/{m.total_cases})
+                      </td>
+                      <td className="py-3 px-4 text-neutral-950 font-semibold text-right">
+                        {utilStr}
+                      </td>
+                      <td className="py-3 px-4 text-neutral-950 font-semibold text-right">
+                        {ctxPct}%
+                      </td>
+                      <td className="py-3 px-4 text-neutral-800 text-right">
+                        {m.median_latency_ms.toFixed(2)} ms
+                      </td>
+                      <td className="py-3 px-4 text-neutral-950 font-bold text-right">
+                        {((1.0 - (m.failure_rate || 0)) * 100).toFixed(1)}%
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* 4. Navigation Guide Cards */}
       <div className="space-y-4 pt-2">

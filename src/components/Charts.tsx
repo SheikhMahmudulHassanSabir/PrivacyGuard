@@ -72,17 +72,20 @@ export const CategoryPerformanceChart: React.FC<{ byCategory: Record<string, Cat
 
 export const LeakageBarChart: React.FC<{
   methods: MethodMetrics[];
-  metricKey: 'leakage_rate' | 'cases_with_leakage_pct';
+  metricKey: 'leakage_rate' | 'cases_with_leakage_pct' | 'context_accuracy' | 'utility_score';
   title: string;
   isPercent?: boolean;
-}> = ({ methods, metricKey, title, isPercent = false }) => {
-  const transMethods = methods.filter((m) => m[metricKey] !== null && m[metricKey] !== undefined);
-  if (transMethods.length === 0) return null;
+  scaleToPercent?: boolean;
+}> = ({ methods, metricKey, title, isPercent = false, scaleToPercent = false }) => {
+  const validMethods = methods.filter((m) => m[metricKey] !== null && m[metricKey] !== undefined);
+  if (validMethods.length === 0) return null;
 
   const patternStyles: Record<string, string> = {
     piivot: 'bg-neutral-950',
     prvl: 'pattern-diagonal-lines border-r border-neutral-950',
-    pii_bench: 'bg-neutral-400 border-r border-neutral-950',
+    pii_bench: 'bg-neutral-500 border-r border-neutral-950',
+    privacylens: 'bg-neutral-800 border-r border-neutral-950',
+    confaide: 'bg-neutral-300 border-r border-neutral-950',
   };
 
   return (
@@ -91,9 +94,13 @@ export const LeakageBarChart: React.FC<{
         {title}
       </h4>
       <div className="space-y-4">
-        {transMethods.map((m) => {
-          const val = Number(m[metricKey]);
-          const displayVal = isPercent ? `${val.toFixed(1)}%` : val.toFixed(3);
+        {validMethods.map((m) => {
+          const val = Number(m[metricKey] ?? 0);
+          const displayVal = isPercent
+            ? `${val.toFixed(1)}%`
+            : scaleToPercent
+            ? `${(val * 100).toFixed(1)}%`
+            : val.toFixed(3);
           const barWidth = isPercent
             ? Math.min(100, Math.max(2, val))
             : Math.min(100, Math.max(2, val * 100));
@@ -125,61 +132,76 @@ export const LeakageBarChart: React.FC<{
 };
 
 export const TradeoffScatterChart: React.FC<{ methods: MethodMetrics[] }> = ({ methods }) => {
-  const transMethods = methods.filter(
-    (m) => m.leakage_rate !== null && m.utility_score !== null && m.leakage_rate !== undefined
+  const validMethods = methods.filter(
+    (m) =>
+      m.leakage_rate !== null &&
+      m.utility_score !== null &&
+      m.leakage_rate !== undefined &&
+      m.utility_score !== undefined
   );
+
+  // Distinct monochrome marker styles for all 5 methods
+  const markerMap: Record<string, string> = {
+    piivot: 'bg-neutral-950 border-2 border-neutral-950 rounded-full',
+    prvl: 'bg-white border-2 border-neutral-950 rounded-none',
+    pii_bench: 'pattern-diagonal-lines border-2 border-neutral-950 rounded-full',
+    privacylens: 'bg-neutral-950 border-2 border-neutral-950 rotate-45 rounded-none',
+    confaide: 'bg-neutral-300 border-2 border-neutral-950 rounded-none',
+  };
 
   return (
     <div className="bg-white border border-neutral-200 p-5">
       <div className="flex flex-wrap justify-between items-center gap-2 mb-4 pb-3 border-b border-neutral-100">
         <h4 className="text-sm font-semibold text-neutral-950 flex items-center gap-2">
           <Crosshair className="w-4 h-4 text-neutral-950 stroke-[1.75]" />
-          <span>Privacy–Utility Trade-Off Quadrant</span>
+          <span>Privacy–Utility Trade-Off Quadrant (All 5 Methods)</span>
         </h4>
         <span className="text-xs font-mono text-neutral-600">
           Target Quadrant · Top-Left (Low Leakage, High Utility)
         </span>
       </div>
 
-      <div className="relative border border-neutral-300 p-6 bg-neutral-50 h-64 flex flex-col justify-between">
+      <div className="relative border border-neutral-300 p-6 bg-neutral-50 h-72 flex flex-col justify-between overflow-hidden">
         {/* Subtle crosshairs */}
         <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-neutral-200 pointer-events-none" />
         <div className="absolute inset-y-0 left-1/2 border-l border-dashed border-neutral-200 pointer-events-none" />
 
         <div className="absolute top-2.5 right-3 text-[10px] font-mono text-neutral-500">
-          High Utility (1.00)
+          High Utility (1.000)
         </div>
         <div className="absolute bottom-2.5 right-3 text-[10px] font-mono text-neutral-500">
-          Higher Leakage (1.00)
+          Higher Leakage (100%)
         </div>
         <div className="absolute bottom-2.5 left-3 text-[10px] font-mono text-neutral-950 font-semibold">
-          Zero Leakage (0.00)
+          Zero Leakage (0.0%)
         </div>
 
         <div className="relative w-full h-full">
-          {transMethods.map((m, idx) => {
-            const leak = m.leakage_rate || 0;
-            const leftPct = Math.max(12, Math.min(85, leak * 80 + 10));
-            const util = m.utility_score || 0.9;
-            const topPct = Math.max(12, Math.min(80, (1.0 - util) * 350 + 15));
+          {validMethods.map((m, idx) => {
+            const leak = m.leakage_rate ?? 0;
+            const util = m.utility_score ?? 0.9;
+            // Spread closely clustered points slightly so all 5 markers and labels are legible
+            const baseLeft = Math.max(14, Math.min(84, leak * 85 + 12));
+            const baseTop = Math.max(14, Math.min(82, (1.0 - util) * 450 + 18));
+            const jitterX = (idx - 2) * 3.5;
+            const jitterY = (idx % 2 === 0 ? -1 : 1) * (idx * 3.5);
+            const leftPct = Math.max(12, Math.min(86, baseLeft + jitterX));
+            const topPct = Math.max(12, Math.min(84, baseTop + jitterY));
 
-            // Differentiate markers by shape/fill in monochrome
             const markerClass =
-              idx === 0
-                ? 'bg-neutral-950 border-2 border-neutral-950 rounded-full'
-                : idx === 1
-                ? 'bg-white border-2 border-neutral-950 rounded-none'
-                : 'pattern-diagonal-lines border-2 border-neutral-950 rounded-full';
+              markerMap[m.method_name.toLowerCase()] ||
+              'bg-neutral-950 border-2 border-neutral-950 rounded-full';
 
             return (
               <div
                 key={m.method_name}
-                className="absolute flex flex-col items-center -translate-x-1/2 -translate-y-1/2 transition group"
+                className="absolute flex flex-col items-center -translate-x-1/2 -translate-y-1/2 transition group hover:z-20"
                 style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+                title={`${m.method_name.toUpperCase()} — Utility: ${util.toFixed(3)}, Leakage Rate: ${(leak * 100).toFixed(1)}%, Context Acc: ${((m.context_accuracy ?? 0) * 100).toFixed(1)}%`}
               >
-                <div className={`w-4 h-4 ${markerClass}`} />
-                <div className="mt-1.5 bg-white border border-neutral-900 text-neutral-950 text-[11px] font-mono font-medium px-2 py-0.5 whitespace-nowrap">
-                  {m.method_name.toUpperCase()} · U:{util.toFixed(2)} · L:{leak.toFixed(2)}
+                <div className={`w-3.5 h-3.5 ${markerClass}`} />
+                <div className="mt-1 bg-white/95 border border-neutral-900 text-neutral-950 text-[10px] font-mono font-semibold px-1.5 py-0.5 whitespace-nowrap shadow-xs">
+                  {m.method_name.toUpperCase()} · U:{util.toFixed(3)} · L:{(leak * 100).toFixed(1)}%
                 </div>
               </div>
             );
@@ -187,7 +209,7 @@ export const TradeoffScatterChart: React.FC<{ methods: MethodMetrics[] }> = ({ m
         </div>
       </div>
       <div className="text-[11px] font-mono text-neutral-500 mt-2.5 text-center">
-        X-Axis: Residual Leakage Rate (0.00 Left → 1.00 Right) · Y-Axis: Downstream Utility Score
+        X-Axis: Residual Leakage Rate (0.0% Left → 100.0% Right) · Y-Axis: Downstream Utility Score (0.000 → 1.000)
       </div>
     </div>
   );

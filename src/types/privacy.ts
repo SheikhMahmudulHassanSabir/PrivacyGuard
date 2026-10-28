@@ -77,21 +77,24 @@ export interface MethodMetrics {
   failure_rate: number;
   median_latency_ms: number;
   mean_latency_ms: number;
-  leakage_rate?: number | null;
-  cases_with_leakage_pct?: number | null;
-  total_leaked_entities?: number;
-  utility_score?: number | null;
-  context_accuracy?: number | null;
-  unsafe_allow_rate?: number | null;
-  unnecessary_deny_rate?: number | null;
+  leakage_rate: number;
+  cases_with_leakage_pct: number;
+  cases_with_leakage_count?: number;
+  total_leaked_entities: number;
+  total_ground_truth_entities?: number;
+  utility_score: number;
+  context_accuracy: number;
+  unsafe_allow_rate: number;
+  unnecessary_deny_rate: number;
   decision_distribution?: Record<string, number>;
   applicability_note?: string;
-  detector_f1?: number;
+  detector_f1: number;
 }
 
 export interface PerRecordMethodDetail {
   protected_text?: string;
   privacy_decision?: string;
+  context_compliant?: boolean;
   latency_ms: number;
   leakage_rate?: number;
   leaked_entities?: Array<{ text: string; type: string; match_type?: string }>;
